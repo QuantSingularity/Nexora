@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import date
 import pytest
 from src.monitoring.adverse_event_reporting import AdverseEvent, report_adverse_event

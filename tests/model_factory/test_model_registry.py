@@ -1,3 +1,4 @@
+from typing import Any
 import pytest
 from src.model_factory.model_registry import ModelRegistry
 from src.model_factory.transformer_model import TransformerModel

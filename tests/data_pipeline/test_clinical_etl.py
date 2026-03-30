@@ -1,3 +1,4 @@
+from typing import Any
 import json
 import apache_beam as beam
 import pytest
