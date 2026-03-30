@@ -107,7 +107,7 @@ def serve(port: int = 50051, max_workers: int = 10) -> None:
     #     prediction_service, server
     # )
     # For now, we just log that the service is initialized
-    logger.info(f"PredictionService initialized and ready to be registered")
+    logger.info("PredictionService initialized and ready to be registered")
 
     # Bind server to port
     server.add_insecure_port(f"[::]:{port}")
