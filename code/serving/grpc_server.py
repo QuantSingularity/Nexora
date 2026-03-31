@@ -11,7 +11,6 @@ from concurrent import futures
 from typing import Any, Dict
 
 import grpc
-
 from model_factory.model_registry import ModelRegistry
 
 logger = logging.getLogger(__name__)

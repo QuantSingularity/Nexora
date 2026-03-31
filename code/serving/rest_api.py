@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
 
 # Use absolute imports
 from compliance.phi_audit_logger import PHIAuditLogger
-from model_factory.model_registry import ModelRegistry
+from fastapi import FastAPI, HTTPException
 from model_factory.base_model import BaseModel as MLBaseModel
+from model_factory.model_registry import ModelRegistry
+from pydantic import BaseModel, Field
 from utils.fhir_connector import FHIRConnector
 
 # Setup logging

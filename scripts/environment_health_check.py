@@ -35,8 +35,8 @@ import subprocess
 import sys
 import time
 from typing import Any, Dict, Optional, Tuple
+
 import yaml
-import logging
 
 logging.basicConfig(
     level=logging.INFO,

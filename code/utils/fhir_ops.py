@@ -7,6 +7,7 @@ to OMOP CDM format and validation.
 
 import logging
 from typing import Any, Dict, Optional
+
 import requests
 from fhir.resources.bundle import Bundle
 from pydantic import ValidationError

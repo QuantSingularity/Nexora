@@ -1,7 +1,8 @@
-from typing import Any
-import pytest
 from code.model_factory.model_registry import ModelRegistry
 from code.model_factory.transformer_model import TransformerModel
+from typing import Any
+
+import pytest
 
 
 @pytest.fixture

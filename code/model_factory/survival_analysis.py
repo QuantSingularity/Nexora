@@ -1,9 +1,10 @@
-import pandas as pd
-from lifelines import CoxPHFitter
+import logging
 import os
 import pickle
-from typing import Dict, Any, Optional
-import logging
+from typing import Any, Dict, Optional
+
+import pandas as pd
+from lifelines import CoxPHFitter
 from model_factory.base_model import BaseModel
 
 logger = logging.getLogger(__name__)

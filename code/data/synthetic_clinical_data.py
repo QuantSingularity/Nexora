@@ -6,13 +6,14 @@ that mimics real patient data while preserving privacy. Useful for development,
 testing, and demonstration purposes.
 """
 
-import os
 import logging
+import os
+from datetime import datetime, timedelta
 from typing import Optional
+
 import numpy as np
 import pandas as pd
 from faker import Faker
-from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,5 @@
 from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 from src.data.synthetic_clinical_data import ClinicalDataGenerator

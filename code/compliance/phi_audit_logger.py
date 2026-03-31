@@ -5,12 +5,13 @@ This module provides comprehensive audit logging for Protected Health Informatio
 It ensures HIPAA compliance by tracking all access to patient data.
 """
 
-import sqlite3
+import logging
 import os
+import sqlite3
 from datetime import datetime
 from typing import Optional
+
 import pandas as pd
-import logging
 
 logger = logging.getLogger(__name__)
 

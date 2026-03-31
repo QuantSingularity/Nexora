@@ -9,6 +9,7 @@ length of stay analysis, and various risk adjustment methodologies.
 
 import logging
 from typing import Dict, Optional, Tuple, Union
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd

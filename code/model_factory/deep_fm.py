@@ -1,10 +1,11 @@
-import tensorflow as tf
-from tensorflow.keras import layers, Model
-from typing import Dict, Any, Optional
-import numpy as np
 import logging
 import os
+from typing import Any, Dict, Optional
+
+import numpy as np
+import tensorflow as tf
 from model_factory.base_model import BaseModel
+from tensorflow.keras import Model, layers
 
 logger = logging.getLogger(__name__)
 

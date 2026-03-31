@@ -1,10 +1,11 @@
+import logging
+import os
+from typing import Any, Dict, Optional
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from typing import Dict, Any, Optional
-import logging
-import numpy as np
-import os
 from model_factory.base_model import BaseModel
 
 logger = logging.getLogger(__name__)

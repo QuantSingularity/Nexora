@@ -1,7 +1,8 @@
 import logging
-from typing import Dict, Any
-import numpy as np
 from datetime import datetime
+from typing import Any, Dict
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

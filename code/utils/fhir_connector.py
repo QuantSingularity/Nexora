@@ -12,8 +12,9 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
-from typing import Dict, Any, List, Optional
+
 import pandas as pd
 import requests
 

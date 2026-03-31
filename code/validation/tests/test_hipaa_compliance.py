@@ -11,7 +11,9 @@ import os
 import shutil
 import tempfile
 import unittest
+
 import pandas as pd
+
 from ...data_pipeline.hipaa_compliance.deidentifier import (
     DeidentificationConfig,
     PHIDeidentifier,
