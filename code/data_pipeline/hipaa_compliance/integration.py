@@ -9,9 +9,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import apache_beam as beam
-
-from ..hipaa_compliance.deidentifier import DeidentificationConfig, PHIDeidentifier
-from ..hipaa_compliance.phi_detector import PHIDetector
+from data_pipeline.hipaa_compliance.deidentifier import (
+    DeidentificationConfig,
+    PHIDeidentifier,
+)
+from data_pipeline.hipaa_compliance.phi_detector import PHIDetector
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +24,13 @@ class DeidentifyFHIRDoFn(beam.DoFn):
     """
 
     def __init__(self, config: Optional[DeidentificationConfig] = None) -> None:
-        """
-        Initialize the DoFn.
-
-        Args:
-            config: De-identification configuration
-        """
         self.config = config if config else DeidentificationConfig()
 
     def setup(self) -> None:
         """Set up the DoFn."""
         self.deidentifier = PHIDeidentifier(self.config)
 
-    def process(self, element: Any) -> None:
+    def process(self, element: Any):
         """
         Process a FHIR bundle.
 
@@ -63,14 +59,6 @@ class DeidentifyDataFrameDoFn(beam.DoFn):
         patient_id_col: Optional[str] = None,
         phi_cols: Optional[List[str]] = None,
     ) -> None:
-        """
-        Initialize the DoFn.
-
-        Args:
-            config: De-identification configuration
-            patient_id_col: Column name for patient ID
-            phi_cols: List of column names containing PHI
-        """
         self.config = config if config else DeidentificationConfig()
         self.patient_id_col = patient_id_col
         self.phi_cols = phi_cols
@@ -79,7 +67,7 @@ class DeidentifyDataFrameDoFn(beam.DoFn):
         """Set up the DoFn."""
         self.deidentifier = PHIDeidentifier(self.config)
 
-    def process(self, element: Any) -> None:
+    def process(self, element: Any):
         """
         Process a pandas DataFrame.
 
@@ -108,18 +96,13 @@ class HIPAACompliantHealthcareETL(beam.PTransform):
 
     def __init__(
         self,
+        pipeline_config: Dict[str, Any],
         deidentification_config: Optional[DeidentificationConfig] = None,
         patient_id_col: Optional[str] = None,
         phi_cols: Optional[List[str]] = None,
     ) -> None:
-        """
-        Initialize the PTransform.
-
-        Args:
-            deidentification_config: Configuration for de-identification
-            patient_id_col: Column name for patient ID
-            phi_cols: List of column names containing PHI
-        """
+        super().__init__()
+        self.pipeline_config = pipeline_config
         self.deidentification_config = (
             deidentification_config
             if deidentification_config
@@ -128,33 +111,22 @@ class HIPAACompliantHealthcareETL(beam.PTransform):
         self.patient_id_col = patient_id_col
         self.phi_cols = phi_cols
 
-    def expand(self, pcoll: Any) -> None:
+    def expand(self, pcoll: Any) -> Any:
         return (
             pcoll
-            | "ParseFHIR" >> beam.Map(parse_fhir_bundle)
             | "DeidentifyFHIR"
             >> beam.ParDo(DeidentifyFHIRDoFn(self.deidentification_config))
-            | "ValidateClinicalData" >> beam.Map(ClinicalValidator().validate)
-            | "EncodeMedicalConcepts"
-            >> beam.ParDo(ICD10Encoder(config["coding_systems"]))
-            | "TemporalAlignment"
-            >> beam.WindowInto(beam.window.SlidingWindows(3600, 900))
-            | "FeatureGeneration" >> beam.ParDo(ClinicalFeatureGenerator())
             | "DeidentifyFeatures"
             >> beam.ParDo(
                 DeidentifyDataFrameDoFn(
                     self.deidentification_config, self.patient_id_col, self.phi_cols
                 )
             )
-            | "WriteToFeatureStore"
-            >> beam.io.WriteToFeast(
-                feature_store=config["feature_store"],
-                entity_mapping=config["entity_map"],
-            )
         )
 
 
 def create_hipaa_compliant_etl(
+    pipeline_config: Optional[Dict[str, Any]] = None,
     deidentification_config: Optional[DeidentificationConfig] = None,
     patient_id_col: Optional[str] = None,
     phi_cols: Optional[List[str]] = None,
@@ -163,6 +135,7 @@ def create_hipaa_compliant_etl(
     Create a HIPAA-compliant ETL pipeline.
 
     Args:
+        pipeline_config: Pipeline configuration dictionary
         deidentification_config: Configuration for de-identification
         patient_id_col: Column name for patient ID
         phi_cols: List of column names containing PHI
@@ -170,7 +143,13 @@ def create_hipaa_compliant_etl(
     Returns:
         HIPAA-compliant ETL pipeline
     """
+    cfg = pipeline_config or {
+        "coding_systems": ["ICD10", "SNOMED-CT", "LOINC"],
+        "feature_store": "nexora_feature_store",
+        "entity_map": {"patient_id": "patient"},
+    }
     return HIPAACompliantHealthcareETL(
+        pipeline_config=cfg,
         deidentification_config=deidentification_config,
         patient_id_col=patient_id_col,
         phi_cols=phi_cols,
@@ -189,14 +168,3 @@ def detect_phi_in_pipeline_data(data_sample: Any) -> Dict[str, Any]:
     """
     detector = PHIDetector()
     return detector.generate_phi_report(data_sample)
-
-
-from ..data_pipeline.clinical_etl import ClinicalValidator, parse_fhir_bundle
-from ..data_pipeline.icd10_encoder import ICD10Encoder
-from ..data_pipeline.temporal_features import ClinicalFeatureGenerator
-
-config = {
-    "coding_systems": ["ICD10", "SNOMED-CT", "LOINC"],
-    "feature_store": "nexora_feature_store",
-    "entity_map": {"patient_id": "patient"},
-}

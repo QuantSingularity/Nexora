@@ -168,7 +168,9 @@ class TransformerModel(BaseModel):
     def save(self, path: Optional[str] = None) -> None:
         """Saves the model state dictionary to the specified path."""
         save_path = path or self.model_path
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
         torch.save(self.model.state_dict(), save_path)
         logger.info(f"Transformer model saved to {save_path}")
 

@@ -129,7 +129,9 @@ class DeepFMModel(BaseModel):
     def save(self, path: Optional[str] = None) -> None:
         """Saves the model to the specified path."""
         save_path = path or self.model_path
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        save_dir = os.path.dirname(save_path)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
         self.model.save(save_path)
         logger.info(f"DeepFM model saved to {save_path}")
 

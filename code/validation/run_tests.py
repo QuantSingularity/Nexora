@@ -4,12 +4,13 @@ import sys
 import unittest
 from datetime import datetime
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pandas as pd
-from src.compliance.phi_audit_logger import PHIAuditLogger
-from src.data_pipeline.clinical_etl import ClinicalETL
-from src.model_factory.model_registry import ModelRegistry
-from src.utils.fhir_connector import FHIRConnector
+from compliance.phi_audit_logger import PHIAuditLogger
+from data_pipeline.clinical_etl import ClinicalETL
+from model_factory.model_registry import ModelRegistry
+from utils.fhir_connector import FHIRConnector
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -136,6 +137,7 @@ class TestCoreComponents(unittest.TestCase):
                 "Logged patient ID not found in report.",
             )
             logger.info("PHI Audit Logger test successful.")
+            logger_instance.close()
         except Exception as e:
             self.fail(f"PHI Audit Logger failed with exception: {e}")
 

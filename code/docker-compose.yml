@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  # ── Nexora REST API ────────────────────────────────────────────────────────
+  nexora-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: nexora:latest
+    container_name: nexora-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      PORT: "${PORT:-8000}"
+      HOST: "0.0.0.0"
+      AUDIT_DB_PATH: "/app/audit/phi_access.db"
+      FHIR_SERVER_URL: "${FHIR_SERVER_URL:-http://mock-fhir-server/R4}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    volumes:
+      - nexora-audit:/app/audit
+      - nexora-models:/app/models
+      - nexora-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - nexora-net
+
+  # ── Nexora gRPC Server ────────────────────────────────────────────────────
+  nexora-grpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: nexora:latest
+    container_name: nexora-grpc
+    restart: unless-stopped
+    command: ["python", "-m", "serving.grpc_server"]
+    ports:
+      - "${GRPC_PORT:-50051}:50051"
+    environment:
+      GRPC_PORT: "${GRPC_PORT:-50051}"
+      GRPC_MAX_WORKERS: "${GRPC_MAX_WORKERS:-10}"
+      AUDIT_DB_PATH: "/app/audit/phi_access.db"
+      FHIR_SERVER_URL: "${FHIR_SERVER_URL:-http://mock-fhir-server/R4}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    volumes:
+      - nexora-audit:/app/audit
+      - nexora-models:/app/models
+      - nexora-data:/app/data
+    networks:
+      - nexora-net
+
+  # ── Clinician UI (Streamlit) ───────────────────────────────────────────────
+  nexora-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: nexora:latest
+    container_name: nexora-ui
+    restart: unless-stopped
+    command: ["python", "-m", "streamlit", "run", "interfaces/streamlit_app.py",
+              "--server.port=8501", "--server.address=0.0.0.0",
+              "--server.headless=true"]
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    environment:
+      NEXORA_API_URL: "http://nexora-api:8000"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    depends_on:
+      nexora-api:
+        condition: service_healthy
+    networks:
+      - nexora-net
+
+volumes:
+  nexora-audit:
+    driver: local
+  nexora-models:
+    driver: local
+  nexora-data:
+    driver: local
+
+networks:
+  nexora-net:
+    driver: bridge

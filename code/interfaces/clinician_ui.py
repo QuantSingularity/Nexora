@@ -3,16 +3,15 @@ from datetime import datetime
 from typing import Any, Dict
 
 import pandas as pd
-
-from ..model_factory.model_registry import ModelRegistry
-from ..monitoring.adverse_event_reporting import AdverseEventReporter
-from ..monitoring.clinical_metrics import ClinicalMetrics
-from ..utils.fhir_connector import FHIRConnector
+from model_factory.model_registry import ModelRegistry
+from monitoring.adverse_event_reporting import AdverseEventReporter
+from monitoring.clinical_metrics import ClinicalMetrics
+from utils.fhir_connector import FHIRConnector
 
 logger = logging.getLogger(__name__)
 
 
-class ClinicianUIcode:
+class ClinicianUI:
     """
     code logic for the Clinician User Interface.
 
@@ -25,7 +24,7 @@ class ClinicianUIcode:
         self.model_registry = ModelRegistry()
         self.metrics_calculator = ClinicalMetrics()
         self.event_reporter = AdverseEventReporter()
-        logger.info("ClinicianUIcode initialized.")
+        logger.info("ClinicianUI initialized.")
 
     def get_patient_summary(self, patient_id: str) -> Dict[str, Any]:
         """

@@ -77,7 +77,7 @@ class PHIDetector:
             Dictionary mapping column names to PHI types and counts
         """
         if len(df) > sample_size:
-            sample_df = df.sample(sample_size)
+            sample_df = df.sample(sample_size, random_state=42)
         else:
             sample_df = df
         results = {}

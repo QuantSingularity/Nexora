@@ -53,25 +53,18 @@ class PredictionService:
             Exception: For other errors during prediction
         """
         try:
-            # Extract request parameters
             model_name = request.get("model_name", "deep_fm")
             model_version = request.get("model_version", "latest")
             patient_data = request.get("patient_data", {})
 
-            # Validate input
             if not patient_data:
                 raise ClinicalDataError("Patient data is required for prediction")
 
-            # Get model from registry
             model = self.model_registry.get_model(model_name, model_version)
 
-            # Generate predictions
             predictions = model.predict(patient_data)
-
-            # Generate explanations
             explanations = model.explain(patient_data)
 
-            # Return response
             return {
                 "predictions": predictions,
                 "explanations": explanations,
@@ -95,27 +88,23 @@ def serve(port: int = 50051, max_workers: int = 10) -> None:
         port: Port number to listen on (default: 50051)
         max_workers: Maximum number of concurrent workers (default: 10)
     """
-    # Create gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
 
-    # Add prediction service
-    PredictionService()
+    # Instantiate and retain the service so it is not garbage-collected
+    prediction_service = PredictionService()
 
-    # Note: In a real implementation, you would register the service with:
+    # Note: In a full implementation with generated proto stubs, register via:
     # prediction_service_pb2_grpc.add_PredictionServiceServicer_to_server(
     #     prediction_service, server
     # )
-    # For now, we just log that the service is initialized
-    logger.info("PredictionService initialized and ready to be registered")
+    logger.info(
+        f"PredictionService initialized and ready to be registered: {prediction_service}"
+    )
 
-    # Bind server to port
     server.add_insecure_port(f"[::]:{port}")
-
-    # Start server
     server.start()
     logger.info(f"gRPC server started on port {port} with {max_workers} workers")
 
-    # Wait for termination
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:
@@ -124,15 +113,12 @@ def serve(port: int = 50051, max_workers: int = 10) -> None:
 
 
 if __name__ == "__main__":
-    # Get configuration from environment
     port = int(os.environ.get("GRPC_PORT", 50051))
     max_workers = int(os.environ.get("GRPC_MAX_WORKERS", 10))
 
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    # Start server
     serve(port=port, max_workers=max_workers)

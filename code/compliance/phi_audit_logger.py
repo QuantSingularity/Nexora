@@ -33,7 +33,9 @@ class PHIAuditLogger:
             db_path: Path to the SQLite database file for audit logs
         """
         # Ensure directory exists
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
 
         self.db_path = db_path
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
@@ -236,10 +238,13 @@ class PHIAuditLogger:
 
     def close(self) -> None:
         """Close the database connection."""
-        if self.conn:
+        if getattr(self, "conn", None):
             self.conn.close()
             logger.info("Closed PHI Audit Logger database connection")
 
     def __del__(self) -> None:
         """Cleanup database connection on deletion."""
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass

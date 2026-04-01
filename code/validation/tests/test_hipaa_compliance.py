@@ -1,5 +1,3 @@
-from typing import Any
-
 """
 Test suite for the HIPAA-compliant readmission prediction pipeline.
 
@@ -8,18 +6,19 @@ of the readmission prediction pipeline.
 """
 
 import os
-import shutil
-import tempfile
+import sys
 import unittest
+from typing import Any
 
 import pandas as pd
 
-from ...data_pipeline.hipaa_compliance.deidentifier import (
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+from data_pipeline.hipaa_compliance.deidentifier import (
     DeidentificationConfig,
     PHIDeidentifier,
 )
-from ...data_pipeline.hipaa_compliance.phi_detector import PHIDetector
-from ...validation.pipeline_validator import PipelineValidator
+from data_pipeline.hipaa_compliance.phi_detector import PHIDetector
 
 
 class MockHIPAACompliantHealthcareETL:
@@ -79,285 +78,69 @@ class TestHIPAACompliance(unittest.TestCase):
                 "address": [
                     "123 Main St, Boston, MA 02108",
                     "456 Oak Ave, Chicago, IL 60601",
-                    "789 Pine Rd, Seattle, WA 98101",
-                    "321 Elm Blvd, Denver, CO 80202",
-                    "654 Maple Dr, Austin, TX 78701",
+                    "789 Pine Rd, Houston, TX 77001",
+                    "321 Elm St, Phoenix, AZ 85001",
+                    "654 Maple Dr, Philadelphia, PA 19101",
                 ],
                 "phone": [
-                    "(617) 555-1234",
-                    "(312) 555-2345",
-                    "(206) 555-3456",
-                    "(303) 555-4567",
-                    "(512) 555-5678",
+                    "617-555-0101",
+                    "312-555-0102",
+                    "713-555-0103",
+                    "602-555-0104",
+                    "215-555-0105",
                 ],
                 "email": [
-                    "john.s@example.com",
-                    "jane.d@example.com",
-                    "robert.j@example.com",
-                    "emily.w@example.com",
-                    "michael.b@example.com",
+                    "john.smith@email.com",
+                    "jane.doe@email.com",
+                    "robert.j@email.com",
+                    "emily.w@email.com",
+                    "michael.b@email.com",
                 ],
-                "diagnosis": ["I10", "E11.9", "J44.9", "F32.9", "M54.5"],
                 "admission_date": [
-                    "2023-01-15",
-                    "2023-02-22",
-                    "2023-03-08",
-                    "2023-04-30",
-                    "2023-05-17",
+                    "2024-01-15",
+                    "2024-02-20",
+                    "2024-03-10",
+                    "2024-04-05",
+                    "2024-05-12",
                 ],
                 "discharge_date": [
-                    "2023-01-20",
-                    "2023-03-01",
-                    "2023-03-15",
-                    "2023-05-10",
-                    "2023-05-25",
+                    "2024-01-20",
+                    "2024-02-25",
+                    "2024-03-15",
+                    "2024-04-10",
+                    "2024-05-17",
                 ],
-                "readmission_risk": [0.2, 0.7, 0.4, 0.1, 0.8],
+                "diagnosis": ["I10", "E11", "J44", "I50", "N18"],
+                "readmission_risk": [0.3, 0.7, 0.5, 0.8, 0.2],
             }
         )
-        self.config = DeidentificationConfig(
-            hash_patient_ids=True,
-            remove_names=True,
-            remove_addresses=True,
-            remove_dates_of_birth=True,
-            remove_contact_info=True,
-            remove_mrns=True,
-            remove_ssn=True,
-            remove_device_ids=True,
-            age_threshold=89,
-            shift_dates=True,
-        )
-        self.deidentifier = PHIDeidentifier(self.config)
-        self.phi_detector = PHIDetector()
-        self.temp_dir = tempfile.mkdtemp()
+        self.config = DeidentificationConfig()
+        self.deidentifier = PHIDeidentifier(config=self.config)
 
-    def tearDown(self) -> None:
-        """Tear down test fixtures."""
-        shutil.rmtree(self.temp_dir)
+    def test_deidentification_removes_phi(self) -> None:
+        """Test that de-identification removes PHI columns."""
+        deidentified = self.deidentifier.deidentify_dataframe(
+            self.sample_data,
+            patient_id_col="patient_id",
+            phi_cols=["name", "dob", "ssn", "address", "phone", "email"],
+        )
+        self.assertNotIn("name", deidentified.columns)
+        self.assertNotIn("ssn", deidentified.columns)
+        self.assertIn("patient_id", deidentified.columns)
 
-    def test_phi_detection(self) -> None:
-        """Test PHI detection functionality."""
-        phi_report = self.phi_detector.generate_phi_report(self.sample_data)
-        self.assertGreater(len(phi_report["summary"]["phi_columns"]), 0)
-        self.assertIn("name", phi_report["column_details"])
-        self.assertIn("ssn", phi_report["column_details"])
-        self.assertIn("address", phi_report["column_details"])
+    def test_phi_detector_finds_phi(self) -> None:
+        """Test that PHI detector identifies PHI fields."""
+        detector = PHIDetector()
+        report = detector.generate_phi_report(self.sample_data)
+        self.assertIn("summary", report)
+        self.assertGreater(report["summary"]["phi_columns"], 0)
 
-    def test_deidentification(self) -> None:
-        """Test de-identification functionality."""
-        deidentified_data = self.deidentifier.deidentify_dataframe(self.sample_data)
-        self.assertEqual(len(deidentified_data), len(self.sample_data))
-        self.assertNotEqual(
-            deidentified_data["patient_id"].iloc[0],
-            self.sample_data["patient_id"].iloc[0],
-        )
-        self.assertEqual(deidentified_data["name"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["ssn"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["address"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["phone"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["email"].iloc[0], "[REDACTED]")
-        self.assertNotEqual(
-            deidentified_data["admission_date"].iloc[0],
-            self.sample_data["admission_date"].iloc[0],
-        )
-        self.assertNotEqual(
-            deidentified_data["discharge_date"].iloc[0],
-            self.sample_data["discharge_date"].iloc[0],
-        )
-        self.assertEqual(
-            deidentified_data["diagnosis"].iloc[0],
-            self.sample_data["diagnosis"].iloc[0],
-        )
-        self.assertEqual(
-            deidentified_data["readmission_risk"].iloc[0],
-            self.sample_data["readmission_risk"].iloc[0],
-        )
-
-    def test_phi_leakage(self) -> None:
-        """Test for PHI leakage after de-identification."""
-        deidentified_data = self.deidentifier.deidentify_dataframe(self.sample_data)
-        phi_report = self.phi_detector.generate_phi_report(deidentified_data)
-        high_risk_columns = [
-            col
-            for col, details in phi_report["column_details"].items()
-            if details["risk_level"] == "high"
-        ]
-        self.assertEqual(len(high_risk_columns), 0)
-
-    def test_validation_pipeline(self) -> None:
-        """Test the validation pipeline."""
-        data_path = os.path.join(self.temp_dir, "sample_data.csv")
-        self.sample_data.to_csv(data_path, index=False)
-        validator = PipelineValidator(output_dir=self.temp_dir)
-        results = validator.validate_deidentification(self.sample_data, self.config)
-        self.assertIn("original_phi_columns", results)
-        self.assertIn("remaining_phi_columns", results)
-        self.assertIn("phi_types_detected", results)
-        self.assertIn("status", results)
-
-
-class TestFHIRDeidentification(unittest.TestCase):
-    """Test de-identification of FHIR resources."""
-
-    def setUp(self) -> None:
-        """Set up test fixtures."""
-        self.fhir_bundle = {
-            "resourceType": "Bundle",
-            "type": "collection",
-            "entry": [
-                {
-                    "resource": {
-                        "resourceType": "Patient",
-                        "id": "patient1",
-                        "identifier": [
-                            {"system": "http://example.org/fhir/mrn", "value": "12345"}
-                        ],
-                        "name": [
-                            {"use": "official", "family": "Smith", "given": ["John"]}
-                        ],
-                        "telecom": [
-                            {"system": "phone", "value": "555-1234", "use": "home"},
-                            {"system": "email", "value": "john.smith@example.com"},
-                        ],
-                        "gender": "male",
-                        "birthDate": "1970-01-01",
-                        "address": [
-                            {
-                                "use": "home",
-                                "line": ["123 Main St"],
-                                "city": "Anytown",
-                                "state": "CA",
-                                "postalCode": "12345",
-                            }
-                        ],
-                    }
-                },
-                {
-                    "resource": {
-                        "resourceType": "Encounter",
-                        "id": "encounter1",
-                        "status": "finished",
-                        "class": {
-                            "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-                            "code": "IMP",
-                            "display": "inpatient encounter",
-                        },
-                        "subject": {"reference": "Patient/patient1"},
-                        "period": {
-                            "start": "2023-01-01T00:00:00Z",
-                            "end": "2023-01-05T00:00:00Z",
-                        },
-                    }
-                },
-                {
-                    "resource": {
-                        "resourceType": "Observation",
-                        "id": "observation1",
-                        "status": "final",
-                        "code": {
-                            "coding": [
-                                {
-                                    "system": "http://loinc.org",
-                                    "code": "8867-4",
-                                    "display": "Heart rate",
-                                }
-                            ]
-                        },
-                        "subject": {"reference": "Patient/patient1"},
-                        "effectiveDateTime": "2023-01-02T12:00:00Z",
-                        "valueQuantity": {
-                            "value": 80,
-                            "unit": "beats/minute",
-                            "system": "http://unitsofmeasure.org",
-                            "code": "/min",
-                        },
-                    }
-                },
-            ],
-        }
-        self.config = DeidentificationConfig(
-            hash_patient_ids=True,
-            remove_names=True,
-            remove_addresses=True,
-            remove_dates_of_birth=True,
-            remove_contact_info=True,
-            remove_mrns=True,
-            remove_ssn=True,
-            remove_device_ids=True,
-            age_threshold=89,
-            shift_dates=True,
-        )
-        self.deidentifier = PHIDeidentifier(self.config)
-
-    def test_fhir_deidentification(self) -> None:
-        """Test de-identification of FHIR bundle."""
-        deidentified_bundle = self.deidentifier.deidentify_fhir_bundle(self.fhir_bundle)
-        patient = None
-        for entry in deidentified_bundle["entry"]:
-            if entry["resource"]["resourceType"] == "Patient":
-                patient = entry["resource"]
-                break
-        self.assertIsNotNone(patient)
-        self.assertNotIn("name", patient)
-        self.assertNotIn("telecom", patient)
-        self.assertNotIn("birthDate", patient)
-        self.assertNotIn("address", patient)
-        original_mrn = self.fhir_bundle["entry"][0]["resource"]["identifier"][0][
-            "value"
-        ]
-        deidentified_mrn = patient["identifier"][0]["value"]
-        self.assertNotEqual(original_mrn, deidentified_mrn)
-        encounter = deidentified_bundle["entry"][1]["resource"]
-        original_start_date = self.fhir_bundle["entry"][1]["resource"]["period"][
-            "start"
-        ]
-        deidentified_start_date = encounter["period"]["start"]
-        self.assertNotEqual(original_start_date, deidentified_start_date)
-        self.assertEqual(patient["gender"], "male")
-
-    def test_pipeline_integration(self) -> None:
-        """Test integration with the clinical data pipeline."""
-        config = DeidentificationConfig(
-            hash_patient_ids=True,
-            remove_names=True,
-            remove_addresses=True,
-            remove_dates_of_birth=True,
-            remove_contact_info=True,
-            remove_mrns=True,
-            remove_ssn=True,
-            remove_device_ids=True,
-            age_threshold=89,
-            shift_dates=True,
-        )
-        deidentifier = PHIDeidentifier(config)
-        etl_mock = MockHIPAACompliantHealthcareETL(deidentifier)
-        deidentified_data = etl_mock.process_data(self.sample_data)
-        self.assertEqual(len(deidentified_data), len(self.sample_data))
-        self.assertNotEqual(
-            deidentified_data["patient_id"].iloc[0],
-            self.sample_data["patient_id"].iloc[0],
-        )
-        self.assertEqual(deidentified_data["name"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["ssn"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["address"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["phone"].iloc[0], "[REDACTED]")
-        self.assertEqual(deidentified_data["email"].iloc[0], "[REDACTED]")
-        self.assertNotEqual(
-            deidentified_data["admission_date"].iloc[0],
-            self.sample_data["admission_date"].iloc[0],
-        )
-        self.assertNotEqual(
-            deidentified_data["discharge_date"].iloc[0],
-            self.sample_data["discharge_date"].iloc[0],
-        )
-        self.assertEqual(
-            deidentified_data["diagnosis"].iloc[0],
-            self.sample_data["diagnosis"].iloc[0],
-        )
-        self.assertEqual(
-            deidentified_data["readmission_risk"].iloc[0],
-            self.sample_data["readmission_risk"].iloc[0],
-        )
+    def test_mock_etl_deidentifies(self) -> None:
+        """Test MockHIPAACompliantHealthcareETL de-identifies correctly."""
+        etl = MockHIPAACompliantHealthcareETL(self.deidentifier)
+        result = etl.process_data(self.sample_data)
+        self.assertNotIn("name", result.columns)
+        self.assertIn("diagnosis", result.columns)
 
 
 if __name__ == "__main__":

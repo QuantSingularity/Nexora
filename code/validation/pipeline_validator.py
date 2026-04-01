@@ -12,7 +12,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from core.logging import get_logger
+from data_pipeline.hipaa_compliance.deidentifier import (
+    DeidentificationConfig,
+    PHIDeidentifier,
+)
+from data_pipeline.hipaa_compliance.phi_detector import PHIDetector
 from sklearn.metrics import (
     average_precision_score,
     precision_recall_curve,
@@ -20,10 +24,6 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
-from ..hipaa_compliance.deidentifier import DeidentificationConfig, PHIDeidentifier
-from ..hipaa_compliance.phi_detector import PHIDetector
-
-logger = get_logger(__name__)
 logger = logging.getLogger(__name__)
 
 

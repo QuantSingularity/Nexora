@@ -72,7 +72,6 @@ class ModelRegistry:
                 f"Model {model_name} version {version} not found in registry."
             )
         model_info = self.metadata[model_name][version]
-        model_info["path"]
         model_config = model_info["config"]
         if model_name == "deep_fm":
             from model_factory.deep_fm import DeepFMModel
@@ -108,7 +107,3 @@ class ModelRegistry:
             }
             for name, versions in self.metadata.items()
         }
-
-
-if not os.path.exists(os.path.join(os.path.dirname(__file__), "model_registry.json")):
-    ModelRegistry()
