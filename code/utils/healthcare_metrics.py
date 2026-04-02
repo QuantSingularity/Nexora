@@ -386,12 +386,12 @@ class HealthcareMetrics:
             raise ValueError(f"Prediction column '{prediction_column}' not found")
         try:
             auc = roc_auc_score(df[outcome_column], df[prediction_column])
-        except:
+        except Exception:
             auc = np.nan
             logger.warning("Could not calculate AUC")
         try:
             ap = average_precision_score(df[outcome_column], df[prediction_column])
-        except:
+        except Exception:
             ap = np.nan
             logger.warning("Could not calculate average precision")
         try:
@@ -401,13 +401,13 @@ class HealthcareMetrics:
             calibration_slope, calibration_intercept = np.polyfit(
                 prob_pred, prob_true, 1
             )
-        except:
+        except Exception:
             prob_true, prob_pred = (np.array([]), np.array([]))
             calibration_slope, calibration_intercept = (np.nan, np.nan)
             logger.warning("Could not calculate calibration metrics")
         try:
             brier = np.mean((df[prediction_column] - df[outcome_column]) ** 2)
-        except:
+        except Exception:
             brier = np.nan
             logger.warning("Could not calculate Brier score")
         thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -430,7 +430,7 @@ class HealthcareMetrics:
                 specificity[threshold] = spec
                 ppv[threshold] = pos_pred_val
                 npv[threshold] = neg_pred_val
-            except:
+            except Exception:
                 sensitivity[threshold] = np.nan
                 specificity[threshold] = np.nan
                 ppv[threshold] = np.nan
