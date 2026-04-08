@@ -205,10 +205,17 @@ class ICD10Encoder:
         chapter_lookup = {}
         for chapter_range, chapter_name in self.ICD10_CHAPTERS.items():
             start, end = chapter_range.split("-")
-            if end.endswith("A"):
-                end = end[:-1] + "Z"
+            # Normalize non-numeric suffixes: strip trailing letters (e.g. "O9A" -> "O99")
+            end_clean = end
+            while end_clean and not end_clean[-1].isdigit():
+                end_clean = end_clean[:-1] + "9" if len(end_clean) > 1 else "9"
+                break
+            end = end_clean
             start_letter, start_num = (start[0], int(start[1:]))
-            end_letter, end_num = (end[0], int(end[1:]))
+            try:
+                end_letter, end_num = (end[0], int(end[1:]))
+            except (ValueError, IndexError):
+                end_letter, end_num = (start_letter, 99)
             current_letter = start_letter
             while ord(current_letter) <= ord(end_letter):
                 if current_letter == start_letter and current_letter == end_letter:
@@ -298,7 +305,11 @@ class ICD10Encoder:
             return []
         matching_groups = []
         for group_name, code_list in self.code_groups.items():
-            if any((normalized.startswith(self.normalize_icd10(c)) for c in code_list)):
+            if any(
+                (norm_c and normalized.startswith(norm_c))
+                for c in code_list
+                for norm_c in [self.normalize_icd10(c)]
+            ):
                 matching_groups.append(group_name)
         return matching_groups
 
@@ -365,10 +376,9 @@ class ICD10Encoder:
                     continue
                 for group_name, code_list in self.custom_code_groups.items():
                     if any(
-                        (
-                            normalized.startswith(self.normalize_icd10(c))
-                            for c in code_list
-                        )
+                        (norm_c and normalized.startswith(norm_c))
+                        for c in code_list
+                        for norm_c in [self.normalize_icd10(c)]
                     ):
                         feature_name = f"icd10_custom_{group_name}"
                         features[feature_name] = 1

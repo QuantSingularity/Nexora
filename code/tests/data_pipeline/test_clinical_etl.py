@@ -118,37 +118,37 @@ def test_clinical_etl_extract_handles_error(monkeypatch):
     """extract() skips patients that raise errors and continues."""
     from data_pipeline import clinical_etl as etl_module
 
-    connector = _MockFHIRConnector()
+    _real_connector = _MockFHIRConnector()
 
     def bad_get(pid):
         if pid == "BAD":
             raise ValueError("Patient not found")
-        return connector.get_patient_data(pid)
+        return _real_connector.get_patient_data(pid)
 
-    connector.get_patient_data = bad_get
-
-    # Patch FHIRConnector inside the module
     class _PatchedETL(etl_module.ClinicalETL):
         def __init__(self):
             super().__init__()
-            self.fhir_connector = connector
+            # Replace the connector with one whose method we control
+            self.fhir_connector = type(
+                "_Connector", (), {"get_patient_data": staticmethod(bad_get)}
+            )()
 
     etl = _PatchedETL()
     result = etl.extract(["PAT001", "BAD", "PAT002"])
-    # Should return 2 valid results, skip BAD
     assert len(result) == 2
 
 
 def test_clinical_etl_load_creates_file(tmp_path, monkeypatch):
-    """load() writes the feature parquet file."""
+    """load() writes the feature file (parquet or csv fallback)."""
     from data_pipeline.clinical_etl import ClinicalETL
 
     monkeypatch.chdir(tmp_path)
     etl = ClinicalETL()
     df = pd.DataFrame({"patient_id": ["P1"], "gender": ["male"]})
     etl.load(df)
-    output_file = tmp_path / "data" / "processed" / "features.parquet"
-    assert output_file.exists()
+    parquet_file = tmp_path / "data" / "processed" / "features.parquet"
+    csv_file = tmp_path / "data" / "processed" / "features.csv"
+    assert parquet_file.exists() or csv_file.exists()
 
 
 def test_clinical_etl_run_pipeline(monkeypatch):

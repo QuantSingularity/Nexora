@@ -3,95 +3,113 @@ import os
 from typing import Any, Dict, Optional
 
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
 from model_factory.base_model import BaseModel
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Lazy-import torch so the module can be loaded without it installed.
+# ---------------------------------------------------------------------------
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
 
-class PositionalEncoding(nn.Module):
-    """Injects some information about the relative or absolute position of the tokens in the sequence."""
+    _TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TORCH_AVAILABLE = False
+    torch = None  # type: ignore
+    nn = None  # type: ignore
+    optim = None  # type: ignore
+
+
+class PositionalEncoding:
+    """Stub when torch is unavailable."""
 
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000) -> None:
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model)
-        )
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
-        self.register_buffer("pe", pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        x = x + self.pe[: x.size(0), :]
-        return self.dropout(x)
-
-
-class ClinicalTransformer(nn.Module):
-    """
-    A Transformer-based model for sequential clinical data (e.g., patient visits).
-    """
-
-    def __init__(
-        self,
-        vocab_size: int,
-        d_model: int,
-        nhead: int,
-        num_layers: int,
-        dim_feedforward: int,
-        dropout: float = 0.1,
-        num_classes: int = 1,
-    ) -> None:
-        super(ClinicalTransformer, self).__init__()
-        self.model_type = "Transformer"
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
-        self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=nhead,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-            batch_first=False,
-        )
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers)
-        self.embedding = nn.Embedding(vocab_size, d_model)
         self.d_model = d_model
-        self.decoder = nn.Linear(d_model, num_classes)
-        self.init_weights()
+        if _TORCH_AVAILABLE:
+            self._module = _PositionalEncodingModule(d_model, dropout, max_len)
 
-    def init_weights(self) -> None:
-        initrange = 0.1
-        self.embedding.weight.data.uniform_(-initrange, initrange)
-        self.decoder.bias.data.zero_()
-        self.decoder.weight.data.uniform_(-initrange, initrange)
+    def __call__(self, x: Any) -> Any:
+        if _TORCH_AVAILABLE:
+            return self._module(x)
+        return x
 
-    def forward(
-        self, src: torch.Tensor, src_mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        """
-        Args:
-            src: Tensor, shape [seq_len, batch_size] (indices of concepts)
-            src_mask: Tensor, shape [seq_len, seq_len]
-        """
-        src = self.embedding(src) * np.sqrt(self.d_model)
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, src_mask)
-        output = output.mean(dim=0)
-        output = self.decoder(output)
-        return torch.sigmoid(output)
+
+if _TORCH_AVAILABLE:
+
+    class _PositionalEncodingModule(nn.Module):  # type: ignore[misc]
+        def __init__(
+            self, d_model: int, dropout: float = 0.1, max_len: int = 5000
+        ) -> None:
+            super().__init__()
+            self.dropout = nn.Dropout(p=dropout)
+            pe = torch.zeros(max_len, d_model)
+            position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+            div_term = torch.exp(
+                torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model)
+            )
+            pe[:, 0::2] = torch.sin(position * div_term)
+            pe[:, 1::2] = torch.cos(position * div_term)
+            pe = pe.unsqueeze(0).transpose(0, 1)
+            self.register_buffer("pe", pe)
+
+        def forward(self, x: "torch.Tensor") -> "torch.Tensor":
+            x = x + self.pe[: x.size(0), :]
+            return self.dropout(x)
+
+    class ClinicalTransformer(nn.Module):  # type: ignore[misc]
+        def __init__(
+            self,
+            vocab_size: int,
+            d_model: int,
+            nhead: int,
+            num_layers: int,
+            dim_feedforward: int,
+            dropout: float = 0.1,
+            num_classes: int = 1,
+        ) -> None:
+            super().__init__()
+            self.model_type = "Transformer"
+            self.pos_encoder = _PositionalEncodingModule(d_model, dropout)
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=nhead,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout,
+                batch_first=False,
+            )
+            self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers)
+            self.embedding = nn.Embedding(vocab_size, d_model)
+            self.d_model = d_model
+            self.decoder = nn.Linear(d_model, num_classes)
+            self._init_weights()
+
+        def _init_weights(self) -> None:
+            initrange = 0.1
+            self.embedding.weight.data.uniform_(-initrange, initrange)
+            self.decoder.bias.data.zero_()
+            self.decoder.weight.data.uniform_(-initrange, initrange)
+
+        def forward(
+            self, src: "torch.Tensor", src_mask: Optional["torch.Tensor"] = None
+        ) -> "torch.Tensor":
+            src = self.embedding(src) * np.sqrt(self.d_model)
+            src = self.pos_encoder(src)
+            output = self.transformer_encoder(src, src_mask)
+            output = output.mean(dim=0)
+            output = self.decoder(output)
+            return torch.sigmoid(output)
+
+else:
+    ClinicalTransformer = None  # type: ignore
 
 
 class TransformerModel(BaseModel):
     """
     Wrapper for the ClinicalTransformer model, adhering to the BaseModel interface.
+    Falls back to a lightweight numpy-based mock when torch is not installed.
     """
 
     def __init__(self, config: Dict[str, Any]) -> None:
@@ -105,31 +123,34 @@ class TransformerModel(BaseModel):
         self.model_path = config.get(
             "model_path", f"models/{self.name}_{self.version}.pt"
         )
-        self.model = ClinicalTransformer(
-            self.vocab_size,
-            self.d_model,
-            self.nhead,
-            self.num_layers,
-            self.dim_feedforward,
-            self.num_classes,
-        )
-        self.optimizer = optim.Adam(
-            self.model.parameters(), lr=config.get("learning_rate", 0.0001)
-        )
-        self.criterion = nn.BCELoss()
+        self._rng = np.random.default_rng(42)
+        if _TORCH_AVAILABLE:
+            self.model = ClinicalTransformer(
+                self.vocab_size,
+                self.d_model,
+                self.nhead,
+                self.num_layers,
+                self.dim_feedforward,
+                num_classes=self.num_classes,
+            )
+            self.optimizer = optim.Adam(
+                self.model.parameters(), lr=config.get("learning_rate", 0.0001)
+            )
+            self.criterion = nn.BCELoss()
+        else:
+            self.model = None
+            self.optimizer = None
+            self.criterion = None
 
     def train(
         self,
         train_data: Dict[str, Any],
         validation_data: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Trains the Transformer model.
-
-        Args:
-            train_data: Dictionary with 'input' (tensor) and 'target' (tensor).
-        """
         logger.info(f"Training Transformer model {self.name} v{self.version}...")
+        if not _TORCH_AVAILABLE:
+            logger.warning("torch not available; skipping training.")
+            return
         self.model.train()
         num_epochs = self.config.get("epochs", 5)
         batch_size = self.config.get("batch_size", 32)
@@ -145,43 +166,29 @@ class TransformerModel(BaseModel):
         logger.info("Transformer training complete.")
 
     def predict(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generates predictions for patient data.
-
-        Args:
-            patient_data: Dictionary containing patient features.
-
-        Returns:
-            A dictionary with prediction results.
-        """
         if "features" not in patient_data and "demographics" not in patient_data:
             raise ValueError(
                 "patient_data must contain 'features' or 'demographics' key"
             )
-        self.model.eval()
-        mock_input = torch.randint(0, self.vocab_size, (50, 1))
-        with torch.no_grad():
-            prediction_proba = self.model(mock_input).item()
-        uncertainty = np.random.uniform(0.05, 0.15)
+        if _TORCH_AVAILABLE:
+            self.model.eval()
+            mock_input = torch.randint(0, self.vocab_size, (50, 1))
+            with torch.no_grad():
+                prediction_proba = float(self.model(mock_input).item())
+        else:
+            prediction_proba = float(self._rng.uniform(0.1, 0.9))
+
+        uncertainty = float(self._rng.uniform(0.05, 0.15))
         return {
-            "risk_score": float(prediction_proba),
+            "risk_score": prediction_proba,
             "prediction_class": "High Risk" if prediction_proba > 0.5 else "Low Risk",
-            "uncertainty": {"std_dev": float(uncertainty)},
+            "uncertainty": {"std_dev": uncertainty},
         }
 
     def predict_with_uncertainty(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generates predictions with uncertainty estimates.
-
-        Args:
-            patient_data: Dictionary containing patient features.
-
-        Returns:
-            A dictionary with prediction and uncertainty results.
-        """
         prediction = self.predict(patient_data)
         risk = prediction["risk_score"]
-        margin = np.random.uniform(0.05, 0.15)
+        margin = float(self._rng.uniform(0.05, 0.15))
         return {
             "risk": risk,
             "prediction_class": prediction["prediction_class"],
@@ -195,25 +202,26 @@ class TransformerModel(BaseModel):
         }
 
     def save(self, path: Optional[str] = None) -> None:
-        """Saves the model state dictionary to the specified path."""
         save_path = path or self.model_path
         save_dir = os.path.dirname(save_path)
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
-        torch.save(self.model.state_dict(), save_path)
-        logger.info(f"Transformer model saved to {save_path}")
+        if _TORCH_AVAILABLE and self.model is not None:
+            torch.save(self.model.state_dict(), save_path)
+            logger.info(f"Transformer model saved to {save_path}")
+        else:
+            logger.warning("torch not available; model not saved.")
 
     def load(self, path: Optional[str] = None) -> None:
-        """Loads the model state dictionary from the specified path."""
         load_path = path or self.model_path
-        self.model.load_state_dict(torch.load(load_path))
-        self.model.eval()
-        logger.info(f"Transformer model loaded from {load_path}")
+        if _TORCH_AVAILABLE and self.model is not None:
+            self.model.load_state_dict(torch.load(load_path))
+            self.model.eval()
+            logger.info(f"Transformer model loaded from {load_path}")
+        else:
+            logger.warning("torch not available; model not loaded.")
 
     def explain(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generates explanations for the prediction.
-        """
         return {
             "method": "Mock Attention Weights",
             "values": [0.45, 0.30, 0.15, 0.07, 0.03],

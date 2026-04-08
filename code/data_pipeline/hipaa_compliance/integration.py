@@ -8,7 +8,6 @@ de-identification into the existing clinical data pipeline.
 import logging
 from typing import Any, Dict, List, Optional
 
-import apache_beam as beam
 from data_pipeline.hipaa_compliance.deidentifier import (
     DeidentificationConfig,
     PHIDeidentifier,
@@ -17,29 +16,51 @@ from data_pipeline.hipaa_compliance.phi_detector import PHIDetector
 
 logger = logging.getLogger(__name__)
 
+# Lazy import apache_beam so the module can be loaded without it installed
+try:
+    import apache_beam as beam
 
-class DeidentifyFHIRDoFn(beam.DoFn):
-    """
-    Apache Beam DoFn for de-identifying FHIR bundles.
-    """
+    _BEAM_AVAILABLE = True
+except ImportError:
+    _BEAM_AVAILABLE = False
+    beam = None  # type: ignore
+
+
+def _beam_dofn_base():
+    """Return beam.DoFn if available, else a no-op base class."""
+    if _BEAM_AVAILABLE:
+        return beam.DoFn
+
+    class _Stub:
+        pass
+
+    return _Stub
+
+
+def _beam_ptransform_base():
+    if _BEAM_AVAILABLE:
+        return beam.PTransform
+
+    class _Stub:
+        pass
+
+    return _Stub
+
+
+class DeidentifyFHIRDoFn(_beam_dofn_base()):
+    """Apache Beam DoFn for de-identifying FHIR bundles."""
 
     def __init__(self, config: Optional[DeidentificationConfig] = None) -> None:
+        if _BEAM_AVAILABLE:
+            super().__init__()
         self.config = config if config else DeidentificationConfig()
 
     def setup(self) -> None:
-        """Set up the DoFn."""
         self.deidentifier = PHIDeidentifier(self.config)
 
     def process(self, element: Any):
-        """
-        Process a FHIR bundle.
-
-        Args:
-            element: FHIR bundle to de-identify
-
-        Yields:
-            De-identified FHIR bundle
-        """
+        if not hasattr(self, "deidentifier"):
+            self.setup()
         try:
             deidentified = self.deidentifier.deidentify_fhir_bundle(element)
             yield deidentified
@@ -48,10 +69,8 @@ class DeidentifyFHIRDoFn(beam.DoFn):
             yield element
 
 
-class DeidentifyDataFrameDoFn(beam.DoFn):
-    """
-    Apache Beam DoFn for de-identifying pandas DataFrames.
-    """
+class DeidentifyDataFrameDoFn(_beam_dofn_base()):
+    """Apache Beam DoFn for de-identifying pandas DataFrames."""
 
     def __init__(
         self,
@@ -59,24 +78,18 @@ class DeidentifyDataFrameDoFn(beam.DoFn):
         patient_id_col: Optional[str] = None,
         phi_cols: Optional[List[str]] = None,
     ) -> None:
+        if _BEAM_AVAILABLE:
+            super().__init__()
         self.config = config if config else DeidentificationConfig()
         self.patient_id_col = patient_id_col
         self.phi_cols = phi_cols
 
     def setup(self) -> None:
-        """Set up the DoFn."""
         self.deidentifier = PHIDeidentifier(self.config)
 
     def process(self, element: Any):
-        """
-        Process a pandas DataFrame.
-
-        Args:
-            element: DataFrame to de-identify
-
-        Yields:
-            De-identified DataFrame
-        """
+        if not hasattr(self, "deidentifier"):
+            self.setup()
         try:
             deidentified = self.deidentifier.deidentify_dataframe(
                 element, patient_id_col=self.patient_id_col, phi_cols=self.phi_cols
@@ -87,12 +100,8 @@ class DeidentifyDataFrameDoFn(beam.DoFn):
             yield element
 
 
-class HIPAACompliantHealthcareETL(beam.PTransform):
-    """
-    HIPAA-compliant version of the HealthcareETL PTransform.
-
-    This transform adds de-identification steps to the original ETL pipeline.
-    """
+class HIPAACompliantHealthcareETL(_beam_ptransform_base()):
+    """HIPAA-compliant version of the HealthcareETL PTransform."""
 
     def __init__(
         self,
@@ -101,7 +110,8 @@ class HIPAACompliantHealthcareETL(beam.PTransform):
         patient_id_col: Optional[str] = None,
         phi_cols: Optional[List[str]] = None,
     ) -> None:
-        super().__init__()
+        if _BEAM_AVAILABLE:
+            super().__init__()
         self.pipeline_config = pipeline_config
         self.deidentification_config = (
             deidentification_config
@@ -112,6 +122,8 @@ class HIPAACompliantHealthcareETL(beam.PTransform):
         self.phi_cols = phi_cols
 
     def expand(self, pcoll: Any) -> Any:
+        if not _BEAM_AVAILABLE:
+            raise RuntimeError("apache_beam is not installed.")
         return (
             pcoll
             | "DeidentifyFHIR"
@@ -130,19 +142,7 @@ def create_hipaa_compliant_etl(
     deidentification_config: Optional[DeidentificationConfig] = None,
     patient_id_col: Optional[str] = None,
     phi_cols: Optional[List[str]] = None,
-) -> HIPAACompliantHealthcareETL:
-    """
-    Create a HIPAA-compliant ETL pipeline.
-
-    Args:
-        pipeline_config: Pipeline configuration dictionary
-        deidentification_config: Configuration for de-identification
-        patient_id_col: Column name for patient ID
-        phi_cols: List of column names containing PHI
-
-    Returns:
-        HIPAA-compliant ETL pipeline
-    """
+) -> "HIPAACompliantHealthcareETL":
     cfg = pipeline_config or {
         "coding_systems": ["ICD10", "SNOMED-CT", "LOINC"],
         "feature_store": "nexora_feature_store",
@@ -157,14 +157,5 @@ def create_hipaa_compliant_etl(
 
 
 def detect_phi_in_pipeline_data(data_sample: Any) -> Dict[str, Any]:
-    """
-    Detect PHI in pipeline data.
-
-    Args:
-        data_sample: Sample data to analyze
-
-    Returns:
-        PHI detection report
-    """
     detector = PHIDetector()
     return detector.generate_phi_report(data_sample)

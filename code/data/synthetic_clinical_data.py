@@ -13,20 +13,103 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from faker import Faker
 
 logger = logging.getLogger(__name__)
+
+try:
+    from faker import Faker as _Faker
+
+    _FAKER_AVAILABLE = True
+except ImportError:
+    _FAKER_AVAILABLE = False
+    _Faker = None  # type: ignore
+
+
+class _SimpleFaker:
+    """Minimal faker fallback using random data when Faker is not installed."""
+
+    _FIRST_NAMES = [
+        "James",
+        "Mary",
+        "John",
+        "Patricia",
+        "Robert",
+        "Jennifer",
+        "Michael",
+        "Linda",
+        "William",
+        "Barbara",
+        "David",
+        "Susan",
+    ]
+    _LAST_NAMES = [
+        "Smith",
+        "Johnson",
+        "Williams",
+        "Brown",
+        "Jones",
+        "Garcia",
+        "Miller",
+        "Davis",
+        "Wilson",
+        "Anderson",
+        "Taylor",
+        "Thomas",
+    ]
+    _CITIES = [
+        "New York",
+        "Los Angeles",
+        "Chicago",
+        "Houston",
+        "Phoenix",
+        "Philadelphia",
+        "San Antonio",
+        "San Diego",
+        "Dallas",
+        "San Jose",
+    ]
+    _STATES = ["NY", "CA", "IL", "TX", "AZ", "PA", "TX", "CA", "TX", "CA"]
+
+    def __init__(self, rng: np.random.Generator) -> None:
+        self._rng = rng
+
+    def name(self) -> str:
+        first = self._FIRST_NAMES[int(self._rng.integers(0, len(self._FIRST_NAMES)))]
+        last = self._LAST_NAMES[int(self._rng.integers(0, len(self._LAST_NAMES)))]
+        return f"{first} {last}"
+
+    def city(self) -> str:
+        idx = int(self._rng.integers(0, len(self._CITIES)))
+        return self._CITIES[idx]
+
+    def state(self) -> str:
+        idx = int(self._rng.integers(0, len(self._STATES)))
+        return self._STATES[idx]
+
+    def zipcode(self) -> str:
+        return str(int(self._rng.integers(10000, 99999))).zfill(5)
+
+    def phone_number(self) -> str:
+        a = int(self._rng.integers(200, 999))
+        b = int(self._rng.integers(100, 999))
+        c = int(self._rng.integers(1000, 9999))
+        return f"({a}) {b}-{c}"
+
+    def email(self) -> str:
+        domains = ["example.com", "test.org", "health.net"]
+        d = domains[int(self._rng.integers(0, len(domains)))]
+        u = int(self._rng.integers(1000, 9999))
+        return f"patient{u}@{d}"
 
 
 class ClinicalDataGenerator:
     """
     Generator for synthetic clinical data.
 
-    This class creates realistic synthetic patient records including demographics,
+    Creates realistic synthetic patient records including demographics,
     diagnoses, medications, lab results, and other clinical data.
     """
 
-    # Common ICD-10 codes for testing
     COMMON_ICD10_CODES = [
         "I10",  # Essential hypertension
         "E11",  # Type 2 diabetes
@@ -40,168 +123,180 @@ class ClinicalDataGenerator:
         "K21",  # Gastro-esophageal reflux disease
     ]
 
-    def __init__(self, seed: int = 42) -> None:
-        """
-        Initialize the clinical data generator.
+    COMMON_MEDICATIONS = [
+        "Lisinopril",
+        "Metformin",
+        "Atorvastatin",
+        "Amlodipine",
+        "Metoprolol",
+        "Omeprazole",
+        "Albuterol",
+        "Sertraline",
+        "Furosemide",
+        "Warfarin",
+    ]
 
-        Args:
-            seed: Random seed for reproducibility
-        """
-        self.faker = Faker()
-        Faker.seed(seed)
+    LAB_TESTS = {
+        "Creatinine": (0.5, 3.0, "mg/dL"),
+        "HbA1c": (4.5, 12.0, "%"),
+        "Hemoglobin": (8.0, 18.0, "g/dL"),
+        "Sodium": (130, 150, "mEq/L"),
+        "Potassium": (3.0, 6.0, "mEq/L"),
+        "Glucose": (60, 400, "mg/dL"),
+        "WBC": (2.0, 15.0, "10^3/uL"),
+    }
+
+    def __init__(self, seed: int = 42) -> None:
         self.rng = np.random.default_rng(seed)
+        if _FAKER_AVAILABLE and _Faker is not None:
+            _Faker.seed(seed)
+            self._faker = _Faker()
+        else:
+            self._faker = _SimpleFaker(self.rng)
+            logger.warning("faker not installed; using built-in data generator.")
         logger.info(f"Initialized ClinicalDataGenerator with seed={seed}")
+
+    def _random_date(self, start_year: int = 2020, end_year: int = 2024) -> str:
+        days = int(self.rng.integers(0, 365 * (end_year - start_year)))
+        d = datetime(start_year, 1, 1) + timedelta(days=days)
+        return d.strftime("%Y-%m-%d")
+
+    def _random_birthdate(self, age: int) -> str:
+        year = datetime.now().year - age
+        day_of_year = int(self.rng.integers(1, 365))
+        d = datetime(year, 1, 1) + timedelta(days=day_of_year)
+        return d.strftime("%Y-%m-%d")
 
     def generate_patient_records(
         self, n: int = 1000, output_path: Optional[str] = None
     ) -> pd.DataFrame:
-        """
-        Generate synthetic patient records.
-
-        Args:
-            n: Number of patient records to generate
-            output_path: Optional path to save the generated data
-
-        Returns:
-            DataFrame containing synthetic patient records
-        """
         logger.info(f"Generating {n} synthetic patient records...")
 
-        # Generate patient IDs
         patient_ids = [f"PAT{str(i).zfill(6)}" for i in range(1, n + 1)]
-
-        # Generate demographics
         ages = self.rng.integers(18, 95, n)
         genders = self.rng.choice(["M", "F"], n)
 
-        # Generate diagnoses (1-3 ICD-10 codes per patient)
         diagnoses = []
         for _ in range(n):
-            num_diagnoses = self.rng.integers(1, 4)
-            patient_diagnoses = self.rng.choice(
-                self.COMMON_ICD10_CODES, size=num_diagnoses, replace=False
-            )
-            diagnoses.append(",".join(patient_diagnoses))
+            num_diagnoses = int(self.rng.integers(1, 4))
+            codes = self.rng.choice(
+                self.COMMON_ICD10_CODES, num_diagnoses, replace=False
+            ).tolist()
+            diagnoses.append("|".join(codes))
 
-        # Generate clinical metrics
-        # Readmission risk: higher for older patients and those with more comorbidities
-        base_risk = self.rng.uniform(0.05, 0.30, n)
-        age_factor = (ages - 18) / 77 * 0.3  # Up to 30% increase for age
-        comorbidity_factor = [
-            len(d.split(",")) * 0.1 for d in diagnoses
-        ]  # 10% per diagnosis
-        readmission_risk = np.clip(base_risk + age_factor + comorbidity_factor, 0, 1)
+        medications = []
+        for _ in range(n):
+            num_meds = int(self.rng.integers(1, 6))
+            meds = self.rng.choice(
+                self.COMMON_MEDICATIONS, num_meds, replace=False
+            ).tolist()
+            medications.append("|".join(meds))
 
-        # Length of stay: lognormal distribution
-        length_of_stay = np.round(self.rng.lognormal(1.2, 0.3, n), 1)
-
-        # Admission dates: random dates in the past 2 years
-        admission_dates = [
-            self.faker.date_between(start_date="-2y", end_date="today")
-            for _ in range(n)
-        ]
-
-        # Discharge dates: admission + length of stay
+        admission_dates = [self._random_date(2022, 2024) for _ in range(n)]
+        los = self.rng.integers(1, 15, n)
         discharge_dates = [
-            admission_dates[i] + timedelta(days=int(length_of_stay[i]))
-            for i in range(n)
+            (datetime.strptime(ad, "%Y-%m-%d") + timedelta(days=int(l))).strftime(
+                "%Y-%m-%d"
+            )
+            for ad, l in zip(admission_dates, los)
         ]
 
-        # Create DataFrame
-        data = pd.DataFrame(
+        readmission_prob = np.where(ages > 65, 0.25, 0.12)
+        readmission = self.rng.binomial(1, readmission_prob).tolist()
+        mortality_prob = np.where(ages > 75, 0.08, 0.03)
+        mortality = self.rng.binomial(1, mortality_prob).tolist()
+
+        creatinine = np.round(self.rng.uniform(0.6, 2.5, n), 2)
+        hba1c = np.round(self.rng.uniform(5.0, 10.0, n), 1)
+
+        names = [self._faker.name() for _ in range(n)]
+        birth_dates = [self._random_birthdate(int(a)) for a in ages]
+
+        df = pd.DataFrame(
             {
                 "patient_id": patient_ids,
+                "name": names,
                 "age": ages,
                 "gender": genders,
+                "birth_date": birth_dates,
                 "diagnoses": diagnoses,
-                "readmission_risk": np.round(readmission_risk, 3),
-                "length_of_stay": length_of_stay,
+                "medications": medications,
                 "admission_date": admission_dates,
                 "discharge_date": discharge_dates,
+                "length_of_stay": los,
+                "readmission_30d": readmission,
+                "in_hospital_mortality": mortality,
+                "creatinine": creatinine,
+                "hba1c": hba1c,
             }
         )
 
-        logger.info(f"Generated {len(data)} patient records")
-
-        # Save if output path provided
         if output_path:
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            os.makedirs(
+                os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
+                exist_ok=True,
+            )
+            df.to_csv(output_path, index=False)
+            logger.info(f"Saved {n} records to {output_path}")
 
-            if output_path.endswith(".parquet"):
-                data.to_parquet(output_path, index=False)
-            elif output_path.endswith(".csv"):
-                data.to_csv(output_path, index=False)
-            else:
-                raise ValueError("Output path must end with .parquet or .csv")
-
-            logger.info(f"Saved synthetic data to {output_path}")
-
-        return data
-
-    def generate_lab_results(
-        self, patient_ids: list, start_date: datetime, end_date: datetime
-    ) -> pd.DataFrame:
-        """
-        Generate synthetic lab results for patients.
-
-        Args:
-            patient_ids: List of patient IDs to generate labs for
-            start_date: Start date for lab results
-            end_date: End date for lab results
-
-        Returns:
-            DataFrame containing synthetic lab results
-        """
-        logger.info(f"Generating lab results for {len(patient_ids)} patients...")
-
-        # Common lab tests
-        lab_tests = [
-            ("Creatinine", "mg/dL", 0.6, 1.2),
-            ("Glucose", "mg/dL", 70, 100),
-            ("Hemoglobin", "g/dL", 12, 16),
-            ("WBC", "K/uL", 4.5, 11.0),
-            ("Platelet", "K/uL", 150, 400),
-        ]
-
-        records = []
-        for patient_id in patient_ids:
-            # Each patient gets 2-5 lab results
-            num_labs = self.rng.integers(2, 6)
-
-            for _ in range(num_labs):
-                # Random date between start and end
-                days_diff = (end_date - start_date).days
-                random_days = self.rng.integers(0, days_diff + 1)
-                lab_date = start_date + timedelta(days=random_days)
-
-                # Random lab test
-                test_name, unit, min_val, max_val = self.rng.choice(lab_tests)
-                value = self.rng.uniform(min_val, max_val)
-
-                records.append(
-                    {
-                        "patient_id": patient_id,
-                        "test_name": test_name,
-                        "value": round(value, 2),
-                        "unit": unit,
-                        "date": lab_date,
-                    }
-                )
-
-        df = pd.DataFrame(records)
-        logger.info(f"Generated {len(df)} lab results")
-
+        logger.info(f"Generated {n} synthetic patient records.")
         return df
 
+    def generate_fhir_bundle(self, patient_id: str) -> dict:
+        """Generate a minimal synthetic FHIR patient bundle."""
+        age = int(self.rng.integers(25, 85))
+        gender = self.rng.choice(["male", "female"])
+        birth_date = self._random_birthdate(age)
+        num_diagnoses = int(self.rng.integers(1, 4))
+        codes = self.rng.choice(
+            self.COMMON_ICD10_CODES, num_diagnoses, replace=False
+        ).tolist()
 
-if __name__ == "__main__":
-    # Example usage
-    generator = ClinicalDataGenerator(seed=42)
+        entries = [
+            {
+                "resource": {
+                    "resourceType": "Patient",
+                    "id": patient_id,
+                    "gender": gender,
+                    "birthDate": birth_date,
+                }
+            }
+        ]
 
-    # Generate patient records
-    patients = generator.generate_patient_records(
-        n=1000, output_path="data/synthetic/synthetic_patients.parquet"
-    )
+        for code in codes:
+            entries.append(
+                {
+                    "resource": {
+                        "resourceType": "Condition",
+                        "id": f"cond-{patient_id}-{code}",
+                        "subject": {"reference": f"Patient/{patient_id}"},
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://hl7.org/fhir/sid/icd-10",
+                                    "code": code,
+                                }
+                            ]
+                        },
+                        "onsetDateTime": self._random_date(),
+                    }
+                }
+            )
 
-    print(f"Generated {len(patients)} patient records")
-    print(patients.head())
+        for lab, (lo, hi, unit) in self.LAB_TESTS.items():
+            val = round(float(self.rng.uniform(lo, hi)), 2)
+            entries.append(
+                {
+                    "resource": {
+                        "resourceType": "Observation",
+                        "id": f"obs-{patient_id}-{lab}",
+                        "subject": {"reference": f"Patient/{patient_id}"},
+                        "code": {"coding": [{"code": lab}], "text": lab},
+                        "valueQuantity": {"value": val, "unit": unit},
+                        "effectiveDateTime": self._random_date(),
+                        "category": [{"coding": [{"code": "laboratory"}]}],
+                    }
+                }
+            )
+
+        return {"resourceType": "Bundle", "type": "collection", "entry": entries}

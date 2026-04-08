@@ -1,11 +1,24 @@
 import os
 import sys
-from typing import Any
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+import pytest
 
-def test_health_check(test_client: Any) -> None:
+# Skip entire module if fastapi is unavailable
+fastapi = pytest.importorskip("fastapi", reason="fastapi not installed")
+httpx = pytest.importorskip("httpx", reason="httpx not installed")
+
+from fastapi.testclient import TestClient
+from serving.rest_api import app
+
+
+@pytest.fixture
+def test_client():
+    return TestClient(app)
+
+
+def test_health_check(test_client) -> None:
     response = test_client.get("/health")
     assert response.status_code == 200
     data = response.json()
@@ -13,7 +26,7 @@ def test_health_check(test_client: Any) -> None:
     assert "timestamp" in data
 
 
-def test_list_models(test_client: Any) -> None:
+def test_list_models(test_client) -> None:
     response = test_client.get("/models")
     assert response.status_code == 200
     data = response.json()
@@ -22,7 +35,7 @@ def test_list_models(test_client: Any) -> None:
     assert len(data["models"]) > 0
 
 
-def test_predict_endpoint(test_client: Any) -> None:
+def test_predict_endpoint(test_client) -> None:
     request_data = {
         "model_name": "transformer_model",
         "model_version": "latest",
@@ -47,13 +60,13 @@ def test_predict_endpoint(test_client: Any) -> None:
     assert "timestamp" in data
 
 
-def test_predict_endpoint_invalid_data(test_client: Any) -> None:
+def test_predict_endpoint_invalid_data(test_client) -> None:
     invalid_request = {"model_name": "transformer_model", "patient_data": {}}
     response = test_client.post("/predict", json=invalid_request)
     assert response.status_code == 422
 
 
-def test_predict_endpoint_unknown_model(test_client: Any) -> None:
+def test_predict_endpoint_unknown_model(test_client) -> None:
     request_data = {
         "model_name": "nonexistent_model_xyz",
         "patient_data": {
@@ -66,26 +79,26 @@ def test_predict_endpoint_unknown_model(test_client: Any) -> None:
     assert response.status_code == 500
 
 
-def test_predict_from_fhir_unreachable(test_client: Any) -> None:
+def test_predict_from_fhir_unreachable(test_client) -> None:
     response = test_client.post(
         "/fhir/patient/123/predict?model_name=transformer_model"
     )
     assert response.status_code == 500
 
 
-def test_predict_from_fhir_invalid_patient(test_client: Any) -> None:
+def test_predict_from_fhir_invalid_patient(test_client) -> None:
     response = test_client.post(
         "/fhir/patient/invalid_patient/predict?model_name=transformer_model"
     )
     assert response.status_code == 500
 
 
-def test_request_logging(test_client: Any) -> None:
+def test_request_logging(test_client) -> None:
     response = test_client.get("/health", headers={"X-Request-ID": "test-123"})
     assert response.status_code == 200
 
 
-def test_get_metrics(test_client: Any) -> None:
+def test_get_metrics(test_client) -> None:
     response = test_client.get("/metrics")
     assert response.status_code == 200
     data = response.json()
@@ -93,7 +106,7 @@ def test_get_metrics(test_client: Any) -> None:
     assert "cohort_metrics" in data
 
 
-def test_audit_patient_history(test_client: Any) -> None:
+def test_audit_patient_history(test_client) -> None:
     request_data = {
         "model_name": "transformer_model",
         "patient_data": {

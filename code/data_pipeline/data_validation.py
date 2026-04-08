@@ -94,6 +94,28 @@ class DataValidator:
                             f"Column '{col}' value '{val}' at row {idx} does not match pattern."
                         )
 
+                elif dtype == "boolean":
+                    if val not in (
+                        0,
+                        1,
+                        True,
+                        False,
+                        "0",
+                        "1",
+                        "true",
+                        "false",
+                        "True",
+                        "False",
+                    ):
+                        try:
+                            iv = int(val)
+                            if iv not in (0, 1):
+                                raise ValueError
+                        except (ValueError, TypeError):
+                            errors.append(
+                                f"Column '{col}' value '{val}' at row {idx} is not a boolean (0/1)."
+                            )
+
                 elif dtype == "datetime":
                     try:
                         pd.to_datetime(val)

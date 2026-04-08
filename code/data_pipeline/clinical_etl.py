@@ -91,10 +91,15 @@ class ClinicalETL:
                         creatinine_df["timestamp"]
                     )
                     reference_time = creatinine_df["timestamp"].max()
-                    temporal_features = (
-                        self.temporal_extractor._extract_window_features(
-                            creatinine_df, reference_time=reference_time
-                        )
+                    # Create a dedicated extractor with the correct value column name
+                    from data_pipeline.temporal_features import TemporalFeatureExtractor
+
+                    creatinine_extractor = TemporalFeatureExtractor(
+                        value_column="creatinine_value",
+                        aggregation_functions=["mean", "min", "max", "std", "count"],
+                    )
+                    temporal_features = creatinine_extractor._extract_window_features(
+                        creatinine_df, reference_time=reference_time
                     )
                     row.update(temporal_features)
             flat_data.append(row)
@@ -108,6 +113,7 @@ class ClinicalETL:
     def load(self, feature_df: pd.DataFrame) -> None:
         """
         Loads the feature DataFrame into a feature store or database.
+        Writes parquet when a parquet engine is available, otherwise CSV.
 
         Args:
             feature_df: The DataFrame of engineered features.
@@ -115,9 +121,13 @@ class ClinicalETL:
         logger.info(
             f"Loading {feature_df.shape[0]} rows of features to mock feature store."
         )
-        output_path = "data/processed/features.parquet"
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        feature_df.to_parquet(output_path, index=False)
+        os.makedirs("data/processed", exist_ok=True)
+        try:
+            output_path = "data/processed/features.parquet"
+            feature_df.to_parquet(output_path, index=False)
+        except Exception:
+            output_path = "data/processed/features.csv"
+            feature_df.to_csv(output_path, index=False)
         logger.info(f"Features successfully saved to {output_path}")
 
     def run_pipeline(self, patient_ids: List[str]) -> pd.DataFrame:

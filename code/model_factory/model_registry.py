@@ -8,20 +8,22 @@ from model_factory.base_model import BaseModel
 class ModelRegistry:
     """
     Manages the registration, loading, and retrieval of different model versions.
-    In a real-world scenario, this would interact with a persistent model store (e.g., MLflow, S3).
     """
 
     def __init__(self, registry_path: str = "model_registry.json") -> None:
-        self.registry_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), registry_path
-        )
+        # Handle both absolute paths (tests pass tmp_path) and bare filenames
+        if os.path.isabs(registry_path):
+            self.registry_path = registry_path
+        else:
+            self.registry_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), registry_path
+            )
         self.models: Dict[str, Dict[str, BaseModel]] = {}
         self._load_registry()
 
     def _load_registry(self) -> None:
-        """Loads the model metadata from a JSON file."""
         if not os.path.exists(self.registry_path):
-            self.metadata = {
+            self.metadata: Dict[str, Any] = {
                 "deep_fm": {
                     "latest": {
                         "path": "models/deep_fm_v1.h5",
@@ -47,8 +49,10 @@ class ModelRegistry:
             self.metadata = json.load(f)
 
     def _save_registry(self) -> None:
-        """Saves the model metadata to a JSON file."""
-        os.makedirs(os.path.dirname(self.registry_path), exist_ok=True)
+        # BUG FIX: guard against empty dirname (bare filename in cwd)
+        registry_dir = os.path.dirname(self.registry_path)
+        if registry_dir:
+            os.makedirs(registry_dir, exist_ok=True)
         with open(self.registry_path, "w") as f:
             json.dump(self.metadata, f, indent=4)
 
@@ -56,12 +60,12 @@ class ModelRegistry:
         self,
         model_name: str,
         version: str,
-        model_or_path,
+        model_or_path: Any,
         config: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Registers a new model version. model_or_path can be a BaseModel instance or a file path string."""
         if model_name not in self.metadata:
             self.metadata[model_name] = {}
+
         if isinstance(model_or_path, BaseModel):
             model_instance = model_or_path
             path = config.get("path", "") if config else ""
@@ -72,9 +76,11 @@ class ModelRegistry:
             path = model_or_path
             model_config = config or {"name": model_name, "version": version}
             model_instance = None
+
         self.metadata[model_name][version] = {"path": path, "config": model_config}
         self.metadata[model_name]["latest"] = self.metadata[model_name][version]
         self._save_registry()
+
         if model_instance is not None:
             if model_name not in self.models:
                 self.models[model_name] = {}
@@ -83,14 +89,19 @@ class ModelRegistry:
     def get_model(
         self, model_name: str, version: Optional[str] = "latest"
     ) -> BaseModel:
-        """Retrieves a specific model instance."""
         version = version or "latest"
         if model_name not in self.metadata or version not in self.metadata[model_name]:
             raise ValueError(
                 f"Model {model_name} version {version} not found in registry."
             )
+
+        # Return cached instance if available
+        if model_name in self.models and version in self.models[model_name]:
+            return self.models[model_name][version]
+
         model_info = self.metadata[model_name][version]
         model_config = model_info["config"]
+
         if model_name == "deep_fm":
             from model_factory.deep_fm import DeepFMModel
 
@@ -107,8 +118,7 @@ class ModelRegistry:
             raise NotImplementedError(
                 f"Model class for {model_name} is not implemented."
             )
-        if model_name in self.models and version in self.models[model_name]:
-            return self.models[model_name][version]
+
         model_instance = model_class(model_config)
         if model_name not in self.models:
             self.models[model_name] = {}
@@ -116,12 +126,9 @@ class ModelRegistry:
         return model_instance
 
     def list_models(self) -> Dict[str, Any]:
-        """Returns a list of all registered models and their versions."""
         return {
             name: {
-                version: info["config"]
-                for version, info in versions.items()
-                if version != "latest"
+                ver: info["config"] for ver, info in versions.items() if ver != "latest"
             }
             for name, versions in self.metadata.items()
         }
