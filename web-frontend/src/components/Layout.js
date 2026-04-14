@@ -2,6 +2,7 @@ import {
   AccountCircle,
   ChevronLeft as ChevronLeftIcon,
   Dashboard as DashboardIcon,
+  Home as HomeIcon,
   Menu as MenuIcon,
   Notifications as NotificationsIcon,
   People as PeopleIcon,
@@ -24,48 +25,54 @@ import {
   Menu,
   MenuItem,
   Toolbar,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 const drawerWidth = 240;
+
+const menuItems = [
+  { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
+  { text: "Patients", icon: <PeopleIcon />, path: "/patients" },
+  { text: "Models", icon: <ScienceIcon />, path: "/models" },
+  { text: "Settings", icon: <SettingsIcon />, path: "/settings" },
+];
 
 function Layout() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(!isMobile);
   const [anchorEl, setAnchorEl] = useState(null);
 
-  const handleDrawerToggle = () => {
-    setOpen(!open);
+  const handleDrawerToggle = () => setOpen((prev) => !prev);
+  const handleProfileMenuOpen = (event) => setAnchorEl(event.currentTarget);
+  const handleProfileMenuClose = () => setAnchorEl(null);
+
+  const handleLogout = () => {
+    handleProfileMenuClose();
+    localStorage.removeItem("auth_token");
+    navigate("/");
   };
 
-  const handleProfileMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
+  // Active check: supports nested routes like /patients/:id
+  const isActive = (path) => {
+    if (path === "/dashboard") return location.pathname === "/dashboard";
+    return location.pathname.startsWith(path);
   };
-
-  const handleProfileMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const menuItems = [
-    { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
-    { text: "Patients", icon: <PeopleIcon />, path: "/patients" },
-    { text: "Models", icon: <ScienceIcon />, path: "/models" },
-    { text: "Settings", icon: <SettingsIcon />, path: "/settings" },
-  ];
 
   return (
-    <Box sx={{ display: "flex" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <AppBar
         position="fixed"
         sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
-          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.07)",
+          zIndex: theme.zIndex.drawer + 1,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
           background: "white",
           color: "primary.main",
         }}
@@ -73,58 +80,89 @@ function Layout() {
         <Toolbar>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label="toggle drawer"
             edge="start"
             onClick={handleDrawerToggle}
             sx={{ mr: 2 }}
           >
-            <MenuIcon />
+            {open && !isMobile ? <ChevronLeftIcon /> : <MenuIcon />}
           </IconButton>
+
           <Box sx={{ display: "flex", alignItems: "center" }}>
             <Typography
               variant="h6"
               noWrap
-              component="div"
-              sx={{ fontWeight: "bold" }}
+              component={Link}
+              to="/"
+              sx={{ fontWeight: 800, textDecoration: "none", color: "inherit" }}
             >
               NEXORA
             </Typography>
-            <Typography variant="subtitle2" sx={{ ml: 1, opacity: 0.7 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                ml: 1,
+                opacity: 0.55,
+                display: { xs: "none", sm: "block" },
+              }}
+            >
               Clinical Prediction System
             </Typography>
           </Box>
+
           <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ display: "flex", alignItems: "center" }}>
-            <IconButton color="inherit" sx={{ mr: 2 }}>
-              <Badge badgeContent={3} color="error">
-                <NotificationsIcon />
-              </Badge>
-            </IconButton>
-            <IconButton
-              edge="end"
-              aria-label="account of current user"
-              aria-haspopup="true"
-              onClick={handleProfileMenuOpen}
-              color="inherit"
-            >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main" }}>
-                <AccountCircle />
-              </Avatar>
-            </IconButton>
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Tooltip title="Home">
+              <IconButton color="inherit" component={Link} to="/">
+                <HomeIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Notifications">
+              <IconButton color="inherit">
+                <Badge badgeContent={3} color="error">
+                  <NotificationsIcon />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Account">
+              <IconButton
+                edge="end"
+                aria-label="account"
+                aria-haspopup="true"
+                onClick={handleProfileMenuOpen}
+                color="inherit"
+              >
+                <Avatar sx={{ width: 32, height: 32, bgcolor: "primary.main" }}>
+                  <AccountCircle />
+                </Avatar>
+              </IconButton>
+            </Tooltip>
             <Menu
               anchorEl={anchorEl}
               open={Boolean(anchorEl)}
               onClose={handleProfileMenuClose}
               transformOrigin={{ horizontal: "right", vertical: "top" }}
               anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+              PaperProps={{ elevation: 3, sx: { minWidth: 160, mt: 0.5 } }}
             >
+              <MenuItem disabled>
+                <Typography variant="caption" color="text.secondary">
+                  Signed in as Admin
+                </Typography>
+              </MenuItem>
+              <Divider />
               <MenuItem onClick={handleProfileMenuClose}>Profile</MenuItem>
-              <MenuItem onClick={handleProfileMenuClose}>My account</MenuItem>
-              <MenuItem onClick={handleProfileMenuClose}>Logout</MenuItem>
+              <MenuItem onClick={handleProfileMenuClose}>My Account</MenuItem>
+              <Divider />
+              <MenuItem onClick={handleLogout} sx={{ color: "error.main" }}>
+                Logout
+              </MenuItem>
             </Menu>
           </Box>
         </Toolbar>
       </AppBar>
+
       <Drawer
         variant={isMobile ? "temporary" : "persistent"}
         open={open}
@@ -136,43 +174,45 @@ function Layout() {
             width: drawerWidth,
             boxSizing: "border-box",
             background: theme.palette.background.default,
-            borderRight: "1px solid rgba(0, 0, 0, 0.08)",
+            borderRight: "1px solid rgba(0,0,0,0.08)",
           },
         }}
       >
         <Toolbar />
-        <Box sx={{ overflow: "auto", mt: 2 }}>
-          {!isMobile && (
-            <Box sx={{ display: "flex", justifyContent: "flex-end", px: 1 }}>
-              <IconButton onClick={handleDrawerToggle}>
-                <ChevronLeftIcon />
-              </IconButton>
-            </Box>
-          )}
+        <Box sx={{ overflow: "auto", mt: 1 }}>
           <List>
             {menuItems.map((item) => {
-              const isActive = location.pathname === item.path;
+              const active = isActive(item.path);
               return (
-                <ListItem key={item.text} disablePadding>
+                <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
                   <ListItemButton
                     component={Link}
                     to={item.path}
-                    selected={isActive}
+                    selected={active}
                     sx={{
                       borderRadius: "0 24px 24px 0",
                       mx: 1,
-                      backgroundColor: isActive
+                      backgroundColor: active
                         ? "rgba(25, 118, 210, 0.12)"
                         : "transparent",
                       "&:hover": {
-                        backgroundColor: "rgba(25, 118, 210, 0.08)",
+                        backgroundColor: active
+                          ? "rgba(25, 118, 210, 0.18)"
+                          : "rgba(25, 118, 210, 0.06)",
+                      },
+                      "&.Mui-selected": {
+                        backgroundColor: "rgba(25, 118, 210, 0.12)",
+                      },
+                      "&.Mui-selected:hover": {
+                        backgroundColor: "rgba(25, 118, 210, 0.18)",
                       },
                     }}
                     onClick={isMobile ? handleDrawerToggle : undefined}
                   >
                     <ListItemIcon
                       sx={{
-                        color: isActive ? "primary.main" : "text.secondary",
+                        color: active ? "primary.main" : "text.secondary",
+                        minWidth: 40,
                       }}
                     >
                       {item.icon}
@@ -180,7 +220,9 @@ function Layout() {
                     <ListItemText
                       primary={item.text}
                       primaryTypographyProps={{
-                        fontWeight: isActive ? 600 : 400,
+                        fontWeight: active ? 700 : 400,
+                        color: active ? "primary.main" : "text.primary",
+                        fontSize: "0.9rem",
                       }}
                     />
                   </ListItemButton>
@@ -188,37 +230,78 @@ function Layout() {
               );
             })}
           </List>
+
           <Divider sx={{ my: 2 }} />
-          <Box sx={{ p: 2 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+
+          <Box sx={{ px: 2 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mb: 1, display: "block" }}
+            >
               System Status
             </Typography>
             <Box
               sx={{
-                p: 2,
+                p: 1.5,
                 bgcolor: "success.light",
                 color: "success.contrastText",
                 borderRadius: 2,
-                fontSize: "0.875rem",
+                fontSize: "0.8rem",
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
               }}
             >
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  bgcolor: "white",
+                  flexShrink: 0,
+                  "@keyframes pulse": {
+                    "0%": { boxShadow: "0 0 0 0 rgba(255,255,255,0.6)" },
+                    "70%": { boxShadow: "0 0 0 6px rgba(255,255,255,0)" },
+                    "100%": { boxShadow: "0 0 0 0 rgba(255,255,255,0)" },
+                  },
+                  animation: "pulse 2s infinite",
+                }}
+              />
               All systems operational
             </Box>
           </Box>
+
+          <Box sx={{ px: 2, mt: 3 }}>
+            <Typography variant="caption" color="text.disabled">
+              Nexora v1.2.0
+            </Typography>
+          </Box>
         </Box>
       </Drawer>
+
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
           pt: 10,
-          width: { sm: `calc(100% - ${open ? drawerWidth : 0}px)` },
-          ml: { sm: open ? `${drawerWidth}px` : 0 },
+          minHeight: "100vh",
+          bgcolor: "background.default",
+          width: "100%",
           transition: theme.transitions.create(["margin", "width"], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
+          ...(open &&
+            !isMobile && {
+              marginLeft: 0,
+              width: `calc(100% - ${drawerWidth}px)`,
+              transition: theme.transitions.create(["margin", "width"], {
+                easing: theme.transitions.easing.easeOut,
+                duration: theme.transitions.duration.enteringScreen,
+              }),
+            }),
         }}
       >
         <Outlet />

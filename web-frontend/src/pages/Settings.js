@@ -44,10 +44,7 @@ const Settings = () => {
 
   const handleSave = async () => {
     try {
-      // In a real application, we would call an API to save settings
-      // await api.saveSettings(settingsData);
-
-      // For now, just simulate a successful save
+      await api.saveSettings({});
       setSnackbarMessage("Settings saved successfully");
       setSnackbarSeverity("success");
       setSnackbarOpen(true);

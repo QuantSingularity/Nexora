@@ -8,6 +8,7 @@ import {
   Tune as TuneIcon,
 } from "@mui/icons-material";
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -62,23 +63,29 @@ ChartJS.register(
 
 const PredictionModels = () => {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [models, setModels] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
+  const [selectedModel, setSelectedModel] = useState(null);
+
+  const fetchModels = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.getModels();
+      setModels(data);
+      if (data.length > 0 && !selectedModel) setSelectedModel(data[0]);
+    } catch (err) {
+      console.error("Error fetching models:", err);
+      setError("Failed to load models. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        setLoading(true);
-        const data = await api.getModels();
-        setModels(data);
-      } catch (error) {
-        console.error("Error fetching models:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleTabChange = (_event, newValue) => {
@@ -89,6 +96,30 @@ const PredictionModels = () => {
     return (
       <Box sx={{ width: "100%", mt: 4 }}>
         <LinearProgress />
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mt: 1, textAlign: "center" }}
+        >
+          Loading prediction models…
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ mt: 4 }}>
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={fetchModels}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       </Box>
     );
   }
@@ -163,12 +194,7 @@ const PredictionModels = () => {
             <CardHeader
               title="Available Models"
               action={
-                <IconButton
-                  aria-label="refresh"
-                  onClick={() =>
-                    api.getModels().then((data) => setModels(data))
-                  }
-                >
+                <IconButton aria-label="refresh" onClick={fetchModels}>
                   <RefreshIcon />
                 </IconButton>
               }

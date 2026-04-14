@@ -2,6 +2,8 @@ import {
   ArrowBack as ArrowBackIcon,
   Assignment as AssignmentIcon,
   CalendarToday as CalendarIcon,
+  Download as DownloadIcon,
+  Event as EventIcon,
   LocalHospital as HospitalIcon,
   Medication as MedicationIcon,
   Science as ScienceIcon,
@@ -9,6 +11,7 @@ import {
   Warning as WarningIcon,
 } from "@mui/icons-material";
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -22,8 +25,10 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Snackbar,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import {
@@ -35,14 +40,13 @@ import {
   LineElement,
   PointElement,
   Title,
-  Tooltip,
+  Tooltip as ChartTooltip,
 } from "chart.js";
 import { useEffect, useState } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
 
-// Register ChartJS components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -50,45 +54,83 @@ ChartJS.register(
   LineElement,
   BarElement,
   Title,
-  Tooltip,
+  ChartTooltip,
   Legend,
 );
+
+const getRiskColor = (risk) => {
+  if (risk >= 0.7) return "error";
+  if (risk >= 0.4) return "warning";
+  return "success";
+};
 
 const PatientDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [patient, setPatient] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMsg, setSnackbarMsg] = useState("");
 
   useEffect(() => {
-    const fetchPatientDetail = async () => {
+    const fetchPatient = async () => {
       try {
         setLoading(true);
+        setError(null);
         const data = await api.getPatientDetail(id);
         setPatient(data);
-      } catch (error) {
-        console.error(`Error fetching patient ${id}:`, error);
+      } catch (err) {
+        console.error(`Error fetching patient ${id}:`, err);
+        setError("Failed to load patient details. Please try again.");
       } finally {
         setLoading(false);
       }
     };
-
-    fetchPatientDetail();
+    fetchPatient();
   }, [id]);
-
-  const handleTabChange = (_event, newValue) => {
-    setActiveTab(newValue);
-  };
-
-  const handleBack = () => {
-    navigate("/patients");
-  };
 
   if (loading) {
     return (
       <Box sx={{ width: "100%", mt: 4 }}>
         <LinearProgress />
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mt: 1, textAlign: "center" }}
+        >
+          Loading patient record…
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ mt: 4 }}>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/patients")}
+          sx={{ mb: 2 }}
+        >
+          Back
+        </Button>
+        <Alert
+          severity="error"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       </Box>
     );
   }
@@ -96,47 +138,52 @@ const PatientDetail = () => {
   if (!patient) {
     return (
       <Box sx={{ mt: 4 }}>
-        <Typography variant="h5">Patient not found</Typography>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate("/patients")}
+          sx={{ mb: 2 }}
+        >
+          Back
+        </Button>
+        <Alert severity="warning">Patient record not found for ID: {id}</Alert>
       </Box>
     );
   }
 
-  const getRiskColor = (risk) => {
-    if (risk >= 0.7) return "error";
-    if (risk >= 0.4) return "warning";
-    return "success";
-  };
-
+  // Chart data — built after null-guard so always safe
   const labResultsData = {
-    labels: patient.labResults.map((lab) => lab.date),
+    labels: patient.labResults.map((l) => l.date),
     datasets: [
       {
         label: "Glucose (mg/dL)",
-        data: patient.labResults.map((lab) => lab.glucose),
+        data: patient.labResults.map((l) => l.glucose),
         borderColor: "#1976d2",
         backgroundColor: "rgba(25, 118, 210, 0.1)",
         tension: 0.4,
+        yAxisID: "y",
       },
       {
         label: "Hemoglobin (g/dL)",
-        data: patient.labResults.map((lab) => lab.hemoglobin),
+        data: patient.labResults.map((l) => l.hemoglobin),
         borderColor: "#9c27b0",
         backgroundColor: "rgba(156, 39, 176, 0.1)",
         tension: 0.4,
+        yAxisID: "y1",
       },
     ],
   };
 
   const riskFactorsData = {
-    labels: patient.riskFactors.map((factor) => factor.name),
+    labels: patient.riskFactors.map((f) => f.name),
     datasets: [
       {
         label: "Impact on Risk",
-        data: patient.riskFactors.map((factor) => factor.impact),
-        backgroundColor: patient.riskFactors.map((factor) =>
-          factor.impact > 0.2
+        data: patient.riskFactors.map((f) => f.impact),
+        backgroundColor: patient.riskFactors.map((f) =>
+          f.impact > 0.2
             ? "rgba(244, 67, 54, 0.7)"
-            : factor.impact > 0.1
+            : f.impact > 0.1
               ? "rgba(255, 152, 0, 0.7)"
               : "rgba(76, 175, 80, 0.7)",
         ),
@@ -145,23 +192,39 @@ const PatientDetail = () => {
     ],
   };
 
+  const handleDownload = () => {
+    setSnackbarMsg("Downloading patient records… (demo)");
+    setSnackbarOpen(true);
+  };
+
+  const handleSchedule = () => {
+    setSnackbarMsg("Follow-up scheduling opened (demo)");
+    setSnackbarOpen(true);
+  };
+
+  const initials = patient.name
+    .split(" ")
+    .map((n) => n[0])
+    .join("");
+
   return (
     <Box>
-      <Box sx={{ mb: 4, display: "flex", alignItems: "center" }}>
+      {/* Header */}
+      <Box sx={{ mb: 4, display: "flex", alignItems: "center", gap: 2 }}>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
-          sx={{ mr: 2 }}
-          onClick={handleBack}
+          onClick={() => navigate("/patients")}
         >
           Back
         </Button>
-        <Typography variant="h4" component="h1">
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
           Patient Details
         </Typography>
       </Box>
 
       <Grid container spacing={3}>
+        {/* Sidebar: patient info card */}
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
@@ -175,16 +238,21 @@ const PatientDetail = () => {
                     mr: 2,
                   }}
                 >
-                  {patient.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+                  {initials}
                 </Avatar>
                 <Box>
-                  <Typography variant="h5" component="div">
+                  <Typography
+                    variant="h5"
+                    component="div"
+                    sx={{ fontWeight: 600 }}
+                  >
                     {patient.name}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ fontFamily: "monospace" }}
+                  >
                     ID: {patient.id}
                   </Typography>
                 </Box>
@@ -193,39 +261,39 @@ const PatientDetail = () => {
               <Divider sx={{ my: 2 }} />
 
               <List dense>
-                <ListItem>
+                <ListItem disableGutters>
                   <ListItemIcon sx={{ minWidth: 36 }}>
-                    <CalendarIcon fontSize="small" />
+                    <CalendarIcon fontSize="small" color="action" />
                   </ListItemIcon>
                   <ListItemText
-                    primary="Age"
+                    primary="Age / DOB"
                     secondary={`${patient.age} years (${patient.dob})`}
                   />
                 </ListItem>
-                <ListItem>
+                <ListItem disableGutters>
                   <ListItemIcon sx={{ minWidth: 36 }}>
-                    <AssignmentIcon fontSize="small" />
+                    <AssignmentIcon fontSize="small" color="action" />
                   </ListItemIcon>
                   <ListItemText primary="Gender" secondary={patient.gender} />
                 </ListItem>
-                <ListItem>
+                <ListItem disableGutters>
                   <ListItemIcon sx={{ minWidth: 36 }}>
-                    <HospitalIcon fontSize="small" />
+                    <HospitalIcon fontSize="small" color="action" />
                   </ListItemIcon>
                   <ListItemText
                     primary="Primary Diagnosis"
                     secondary={patient.primaryDiagnosis}
                   />
                 </ListItem>
-                <ListItem>
+                <ListItem disableGutters>
                   <ListItemIcon sx={{ minWidth: 36 }}>
-                    <WarningIcon fontSize="small" />
+                    <WarningIcon fontSize="small" color="action" />
                   </ListItemIcon>
                   <ListItemText
                     primary="Risk Score"
                     secondary={
                       <Chip
-                        label={`${(patient.riskScore * 100).toFixed(0)}%`}
+                        label={`${(patient.riskScore * 100).toFixed(0)}% Risk`}
                         color={getRiskColor(patient.riskScore)}
                         size="small"
                         sx={{ mt: 0.5 }}
@@ -237,29 +305,57 @@ const PatientDetail = () => {
 
               <Divider sx={{ my: 2 }} />
 
-              <Typography variant="subtitle2" gutterBottom>
+              <Typography
+                variant="subtitle2"
+                gutterBottom
+                sx={{ fontWeight: 600 }}
+              >
                 Contact Information
               </Typography>
-              <Typography variant="body2" paragraph>
-                Phone: {patient.phone}
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                📞 {patient.phone}
               </Typography>
-              <Typography variant="body2" paragraph>
-                Email: {patient.email}
+              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                ✉️ {patient.email}
               </Typography>
-              <Typography variant="body2">
-                Address: {patient.address}
+              <Typography variant="body2" color="text.secondary">
+                📍 {patient.address}
               </Typography>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Box sx={{ display: "flex", gap: 1, flexDirection: "column" }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownload}
+                >
+                  Download Records
+                </Button>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<EventIcon />}
+                  onClick={handleSchedule}
+                >
+                  Schedule Follow-up
+                </Button>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
 
+        {/* Main tabs */}
         <Grid item xs={12} md={8}>
-          <Card sx={{ mb: 3 }}>
+          <Card>
             <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
               <Tabs
                 value={activeTab}
-                onChange={handleTabChange}
-                aria-label="patient tabs"
+                onChange={(_e, v) => setActiveTab(v)}
+                aria-label="patient detail tabs"
+                variant="scrollable"
+                scrollButtons="auto"
               >
                 <Tab label="Clinical Data" />
                 <Tab label="Risk Analysis" />
@@ -268,10 +364,10 @@ const PatientDetail = () => {
               </Tabs>
             </Box>
 
-            {/* Clinical Data Tab */}
+            {/* Tab 0 — Clinical Data */}
             {activeTab === 0 && (
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Lab Results
                 </Typography>
                 <Box sx={{ height: 300, mb: 4 }}>
@@ -280,35 +376,40 @@ const PatientDetail = () => {
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: "top",
-                        },
-                      },
+                      interaction: { mode: "index", intersect: false },
+                      plugins: { legend: { position: "top" } },
                       scales: {
                         y: {
                           beginAtZero: false,
+                          title: { display: true, text: "Glucose (mg/dL)" },
+                          position: "left",
+                        },
+                        y1: {
+                          beginAtZero: false,
+                          title: { display: true, text: "Hemoglobin (g/dL)" },
+                          position: "right",
+                          grid: { drawOnChartArea: false },
                         },
                       },
                     }}
                   />
                 </Box>
 
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Diagnoses
                 </Typography>
                 <List>
-                  {patient.diagnoses.map((diagnosis, index) => (
+                  {patient.diagnoses.map((dx, i) => (
                     <ListItem
-                      key={index}
-                      divider={index < patient.diagnoses.length - 1}
+                      key={i}
+                      divider={i < patient.diagnoses.length - 1}
                     >
                       <ListItemIcon>
-                        <HospitalIcon />
+                        <HospitalIcon color="primary" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={diagnosis.name}
-                        secondary={`Diagnosed: ${diagnosis.date} | ICD-10: ${diagnosis.code}`}
+                        primary={dx.name}
+                        secondary={`Diagnosed: ${dx.date} | ICD-10: ${dx.code}`}
                       />
                     </ListItem>
                   ))}
@@ -316,11 +417,11 @@ const PatientDetail = () => {
               </CardContent>
             )}
 
-            {/* Risk Analysis Tab */}
+            {/* Tab 1 — Risk Analysis */}
             {activeTab === 1 && (
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Risk Factors
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Risk Factor Impact (SHAP)
                 </Typography>
                 <Box sx={{ height: 300, mb: 4 }}>
                   <Bar
@@ -329,11 +430,7 @@ const PatientDetail = () => {
                       indexAxis: "y",
                       responsive: true,
                       maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          display: false,
-                        },
-                      },
+                      plugins: { legend: { display: false } },
                       scales: {
                         x: {
                           beginAtZero: true,
@@ -347,57 +444,80 @@ const PatientDetail = () => {
                   />
                 </Box>
 
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Recommended Interventions
                 </Typography>
                 <List>
-                  {patient.interventions.map((intervention, index) => (
+                  {patient.interventions.map((iv, i) => (
                     <ListItem
-                      key={index}
-                      divider={index < patient.interventions.length - 1}
+                      key={i}
+                      divider={i < patient.interventions.length - 1}
                     >
                       <ListItemIcon>
-                        <ScienceIcon />
+                        <ScienceIcon color="primary" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={intervention.name}
-                        secondary={intervention.description}
+                        primary={iv.name}
+                        secondary={iv.description}
                       />
-                      <Chip
-                        label={intervention.priority}
-                        color={
-                          intervention.priority === "High"
-                            ? "error"
-                            : intervention.priority === "Medium"
-                              ? "warning"
-                              : "success"
-                        }
-                        size="small"
-                      />
+                      <Tooltip title={`Priority: ${iv.priority}`}>
+                        <Chip
+                          label={iv.priority}
+                          color={
+                            iv.priority === "High"
+                              ? "error"
+                              : iv.priority === "Medium"
+                                ? "warning"
+                                : "success"
+                          }
+                          size="small"
+                          sx={{ ml: 1 }}
+                        />
+                      </Tooltip>
                     </ListItem>
                   ))}
                 </List>
               </CardContent>
             )}
 
-            {/* Medications Tab */}
+            {/* Tab 2 — Medications */}
             {activeTab === 2 && (
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Current Medications
                 </Typography>
                 <List>
-                  {patient.medications.map((medication, index) => (
+                  {patient.medications.map((med, i) => (
                     <ListItem
-                      key={index}
-                      divider={index < patient.medications.length - 1}
+                      key={i}
+                      divider={i < patient.medications.length - 1}
                     >
                       <ListItemIcon>
-                        <MedicationIcon />
+                        <MedicationIcon color="primary" />
                       </ListItemIcon>
                       <ListItemText
-                        primary={medication.name}
-                        secondary={`Dosage: ${medication.dosage} | Frequency: ${medication.frequency}`}
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="body1"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              {med.name}
+                            </Typography>
+                            <Chip
+                              label={med.dosage}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Box>
+                        }
+                        secondary={`Frequency: ${med.frequency}`}
                       />
                     </ListItem>
                   ))}
@@ -405,24 +525,64 @@ const PatientDetail = () => {
               </CardContent>
             )}
 
-            {/* Timeline Tab */}
+            {/* Tab 3 — Timeline */}
             {activeTab === 3 && (
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Clinical Timeline
                 </Typography>
                 <List>
-                  {patient.timeline.map((event, index) => (
+                  {patient.timeline.map((event, i) => (
                     <ListItem
-                      key={index}
-                      divider={index < patient.timeline.length - 1}
+                      key={i}
+                      divider={i < patient.timeline.length - 1}
+                      sx={{
+                        borderLeft:
+                          i === patient.timeline.length - 1
+                            ? "3px solid"
+                            : "3px solid",
+                        borderColor:
+                          i === patient.timeline.length - 1
+                            ? "primary.main"
+                            : "divider",
+                        pl: 2,
+                        ml: 1,
+                      }}
                     >
                       <ListItemIcon>
-                        <TimelineIcon />
+                        <TimelineIcon
+                          color={
+                            i === patient.timeline.length - 1
+                              ? "primary"
+                              : "action"
+                          }
+                        />
                       </ListItemIcon>
                       <ListItemText
-                        primary={event.title}
-                        secondary={`${event.date} | ${event.description}`}
+                        primary={
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              variant="body1"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              {event.title}
+                            </Typography>
+                            {i === patient.timeline.length - 1 && (
+                              <Chip
+                                label="Latest"
+                                size="small"
+                                color="primary"
+                              />
+                            )}
+                          </Box>
+                        }
+                        secondary={`${event.date} — ${event.description}`}
                       />
                     </ListItem>
                   ))}
@@ -430,13 +590,23 @@ const PatientDetail = () => {
               </CardContent>
             )}
           </Card>
-
-          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
-            <Button variant="outlined">Download Records</Button>
-            <Button variant="contained">Schedule Follow-up</Button>
-          </Box>
         </Grid>
       </Grid>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          severity="info"
+          onClose={() => setSnackbarOpen(false)}
+          sx={{ width: "100%" }}
+        >
+          {snackbarMsg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
